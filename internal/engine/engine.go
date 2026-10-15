@@ -107,9 +107,10 @@ func (e *Engine) tryClaim(ctx context.Context) {
 	e.logger.Info("claimed task", "task_id", task.TaskID, "title", task.MediaTitle)
 
 	state := &TaskState{
-		TaskID:    task.TaskID,
-		Stage:     StagePreparing,
-		StartedAt: time.Now(),
+		TaskID:          task.TaskID,
+		Stage:           StagePreparing,
+		StartedAt:       time.Now(),
+		StreamFileIndex: -1,
 	}
 
 	e.mu.Lock()
@@ -170,6 +171,7 @@ func (e *Engine) sendHeartbeats(ctx context.Context) error {
 			Stage:       string(s.Stage),
 			ProgressPct: s.ProgressPct,
 			SpeedBps:    int64(s.SpeedMbps * 1024 * 1024),
+			Stream:      s.Stream,
 		}
 		if err := e.bc.Heartbeat(ctx, hb); err != nil {
 			e.logger.Warn("heartbeat failed for task", "task_id", s.TaskID, "error", err)

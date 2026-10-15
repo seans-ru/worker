@@ -1,3 +1,3 @@
-alpha.w.seans.tedeshi.ru {
+{$WORKER_NAME}.w.seans.tedeshi.ru {
     reverse_proxy seans-worker-qbit:8080
 }

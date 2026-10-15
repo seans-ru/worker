@@ -17,6 +17,9 @@ type Config struct {
 	StagingDir          string
 	S3AccessKey         string
 	S3SecretKey         string
+	S3Endpoint          string
+	S3Bucket            string
+	S3Region            string
 	MockS3              bool
 	ClaimInterval       time.Duration
 	MaxConcurrentTasks  int
@@ -27,6 +30,9 @@ type Config struct {
 	DrainOnShutdown     bool
 	DrainTimeout        time.Duration
 	StateDir            string
+	// StreamSegmentSize is the progressive S3 segment size for streaming-while-downloading.
+	// 0 means default (8 MiB).
+	StreamSegmentSize   int64
 }
 
 func Load() (*Config, error) {
@@ -40,6 +46,9 @@ func Load() (*Config, error) {
 		StagingDir:          envOr("STAGING_DIR", "/staging"),
 		S3AccessKey:         os.Getenv("S3_ACCESS_KEY"),
 		S3SecretKey:         os.Getenv("S3_SECRET_KEY"),
+		S3Endpoint:          envOr("S3_ENDPOINT", "https://s3.buckets.ru"),
+		S3Bucket:            envOr("S3_BUCKET", "seans"),
+		S3Region:            envOr("S3_REGION", "ru-1"),
 		MockS3:              envBool("MOCK_S3", false),
 		ClaimInterval:       envDuration("CLAIM_INTERVAL_SEC", 10*time.Second),
 		MaxConcurrentTasks:  envInt("MAX_CONCURRENT_TASKS", 1),
@@ -50,6 +59,7 @@ func Load() (*Config, error) {
 		DrainOnShutdown:     envBool("DRAIN_ON_SHUTDOWN", false),
 		DrainTimeout:        envDuration("DRAIN_TIMEOUT_SEC", 3600*time.Second),
 		StateDir:            envOr("STATE_DIR", "/state"),
+		StreamSegmentSize:   envInt64("STREAM_SEGMENT_SIZE_MB", 8) * 1024 * 1024,
 	}
 
 	if cfg.BackendURL == "" {
@@ -98,6 +108,18 @@ func envInt(key string, fallback int) int {
 		return fallback
 	}
 	n, err := strconv.Atoi(v)
+	if err != nil {
+		return fallback
+	}
+	return n
+}
+
+func envInt64(key string, fallback int64) int64 {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.ParseInt(v, 10, 64)
 	if err != nil {
 		return fallback
 	}

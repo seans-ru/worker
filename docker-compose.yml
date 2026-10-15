@@ -11,6 +11,8 @@ services:
     ports:
       - "6881:6881"
       - "6881:6881/udp"
+      # Web UI только на localhost — http://localhost:8080
+      - "127.0.0.1:8080:8080"
     volumes:
       - ./docker/qbit-config:/config
       - ${STAGING_HOST_DIR:-/mnt/staging}:/downloads
@@ -23,6 +25,8 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    environment:
+      WORKER_NAME: ${WORKER_NAME:-worker}
     volumes:
       - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data

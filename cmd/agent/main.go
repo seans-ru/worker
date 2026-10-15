@@ -39,7 +39,7 @@ func main() {
 	ctx := context.Background()
 
 	// Init rclone uploader
-	uploader, err := s3uploader.New(cfg.StateDir, cfg.S3AccessKey, cfg.S3SecretKey, cfg.MockS3, logger)
+	uploader, err := s3uploader.New(cfg.StateDir, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Endpoint, cfg.S3Bucket, cfg.S3Region, cfg.MockS3, logger)
 	if err != nil {
 		logger.Error("uploader init error", "error", err)
 		os.Exit(1)

@@ -156,7 +156,7 @@ func TestManifest_HappyPath(t *testing.T) {
 
 	slots, err := c.Manifest(context.Background(), "tsk_001", []ManifestFile{
 		{Path: "movie.mkv", SizeBytes: 1024},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("manifest: %v", err)
 	}

@@ -13,8 +13,10 @@ import (
 
 	"github.com/Geardung/seans-worker/internal/backend"
 	"github.com/Geardung/seans-worker/internal/config"
+	"github.com/Geardung/seans-worker/internal/media"
 	"github.com/Geardung/seans-worker/internal/qbit"
 	"github.com/Geardung/seans-worker/internal/s3uploader"
+	"github.com/Geardung/seans-worker/internal/stream"
 )
 
 type Stage string
@@ -40,6 +42,13 @@ type TaskState struct {
 	UploadStart   time.Time
 	DownloadSeconds int
 	UploadSeconds   int
+
+	// Stream holds progressive download/seek window for the primary video file.
+	Stream *backend.StreamProgress
+	// StreamFileIndex is the torrent file index of the primary streamable video.
+	StreamFileIndex int
+	// SegmentSize for progressive S3 upload (0 = default).
+	SegmentSize int64
 }
 
 type taskRunner struct {
@@ -126,22 +135,132 @@ func (tr *taskRunner) prepare(ctx context.Context) error {
 	}
 	tr.state.Files = files
 
+	// Classify media (series episodes, external audio, subtitles) and pick stream target.
+	paths := make([]string, len(files))
+	sizes := make([]int64, len(files))
+	for i, f := range files {
+		paths[i] = f.Name
+		sizes[i] = f.Size
+	}
+	cat := media.Classify(paths, sizes, tr.task.FilePaths)
+	selected, primary := cat.SelectDownloadPriorities(false)
+
+	// Enable selected files; skip samples unless explicitly requested.
+	if len(selected) > 0 {
+		if err := tr.qc.SetFilePriority(ctx, torrent.Hash, selected, 1); err != nil {
+			tr.logger.Warn("set file priority failed", "error", err)
+		}
+		// Deselect the rest (priority 0) so we don't download samples/extras.
+		sel := make(map[int]bool, len(selected))
+		for _, idx := range selected {
+			sel[idx] = true
+		}
+		var skip []int
+		for _, f := range files {
+			if !sel[f.Index] {
+				skip = append(skip, f.Index)
+			}
+		}
+		if len(skip) > 0 {
+			if err := tr.qc.SetFilePriority(ctx, torrent.Hash, skip, 0); err != nil {
+				tr.logger.Warn("clear file priority failed", "error", err)
+			}
+		}
+	}
+
+	// Sequential download so contiguous prefix grows — required for seekable streaming.
+	if err := tr.qc.EnableSequentialDownload(ctx, torrent.Hash); err != nil {
+		tr.logger.Warn("enable sequential download failed", "error", err)
+	}
+	if err := tr.qc.EnableFirstLastPiecePrio(ctx, torrent.Hash); err != nil {
+		tr.logger.Warn("enable first/last piece prio failed", "error", err)
+	}
+
+	// Pick primary video for progressive stream upload.
+	if len(primary) > 0 {
+		tr.state.StreamFileIndex = primary[0]
+	} else if g := cat.FirstPlayable(); g != nil && g.Primary != nil {
+		tr.state.StreamFileIndex = g.Primary.Index
+	} else {
+		// Fallback: largest video file.
+		best := -1
+		var bestSize int64
+		for _, f := range files {
+			m := media.ParsePath(f.Name, f.Size, f.Index)
+			if m.Kind == media.KindVideo && f.Size > bestSize {
+				best, bestSize = f.Index, f.Size
+			}
+		}
+		tr.state.StreamFileIndex = best
+	}
+	tr.state.SegmentSize = tr.cfg.StreamSegmentSize
+
 	// Send manifest to backend and get upload slots
 	manifestFiles := make([]backend.ManifestFile, 0, len(files))
 	for _, f := range files {
-		manifestFiles = append(manifestFiles, backend.ManifestFile{
+		m := media.ParsePath(f.Name, f.Size, f.Index)
+		kind := string(m.Kind)
+		lang := string(m.Language)
+		isPrimary := m.Index == tr.state.StreamFileIndex && m.Kind == media.KindVideo
+		mf := backend.ManifestFile{
 			Path:      f.Name,
 			SizeBytes: f.Size,
-		})
+			Kind:      kind,
+			Season:    m.Season,
+			Episode:   m.Episode,
+			EpisodeEnd: m.EpisodeEnd,
+			Language:  lang,
+			Flags:     m.Flags,
+			Primary:   isPrimary,
+		}
+		manifestFiles = append(manifestFiles, mf)
 	}
 
-	_, err = tr.bc.Manifest(ctx, tr.task.TaskID, manifestFiles)
-	if err != nil {
+	catalog := map[string]any{
+		"groups": describeGroups(cat),
+	}
+	if _, err := tr.bc.Manifest(ctx, tr.task.TaskID, manifestFiles, catalog); err != nil {
 		return fmt.Errorf("send manifest: %w", err)
 	}
 
-	tr.logger.Info("preparing complete", "files", len(files))
+	tr.logger.Info("preparing complete",
+		"files", len(files),
+		"stream_file_index", tr.state.StreamFileIndex,
+		"groups", len(cat.Groups),
+	)
 	return nil
+}
+
+func describeGroups(cat *media.MediaCatalog) []map[string]any {
+	out := make([]map[string]any, 0, len(cat.Groups))
+	for _, g := range cat.Groups {
+		item := map[string]any{
+			"season":  g.Key.Season,
+			"episode": g.Key.Episode,
+			"year":    g.Key.MovieYear,
+		}
+		if g.Primary != nil {
+			item["primary_path"] = g.Primary.Path
+			item["primary_size"] = g.Primary.Size
+			item["primary_index"] = g.Primary.Index
+		}
+		var audios []map[string]any
+		for _, a := range g.ExternalAudio {
+			audios = append(audios, map[string]any{
+				"path": a.Path, "language": string(a.Language), "flags": a.Flags,
+			})
+		}
+		var subs []map[string]any
+		for _, s := range g.Subtitles {
+			subs = append(subs, map[string]any{
+				"path": s.Path, "language": string(s.Language),
+			})
+		}
+		item["external_audio"] = audios
+		item["subtitles"] = subs
+		out = append(out, item)
+	}
+	return out
 }
 
 func (tr *taskRunner) waitForTorrent(ctx context.Context, savePath string) (*qbit.TorrentInfo, error) {
@@ -196,12 +315,21 @@ func (tr *taskRunner) download(ctx context.Context) error {
 	tr.state.Message = "downloading torrent"
 	tr.logger.Info("download started")
 
+	// Progressive S3 segment upload while downloading.
+	destPrefix := "users/" + tr.task.TaskID + "/"
+	logFile := filepath.Join(tr.cfg.StateDir, "rclone.log")
+	su := newStreamUploader(tr.uploader, destPrefix, tr.cfg.StreamSegmentSize, logFile)
+
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
 	var lastDownloaded int64
 	lastProgressTime := time.Now()
 	taskDeadline := time.After(tr.cfg.TaskMaxDuration)
+
+	// Layouts built once piece size is known.
+	var layout *stream.FileLayout
+	var layouts []stream.FileLayout
 
 	for {
 		select {
@@ -235,9 +363,44 @@ func (tr *taskRunner) download(ctx context.Context) error {
 				return &TaskError{Reason: "stalled: no download progress", Permanent: true}
 			}
 
+			// Progressive segment upload for the primary video file.
+			if tr.state.StreamFileIndex >= 0 && tr.state.StreamFileIndex < len(tr.state.Files) {
+				if layouts == nil {
+					pieceSize, perr := tr.qc.GetPieceSize(ctx, torrent.Hash)
+					if perr == nil && pieceSize > 0 {
+						layouts = fileLayoutsFromQBit(tr.state.Files, pieceSize)
+						for i := range layouts {
+							if layouts[i].Index == tr.state.StreamFileIndex {
+								layout = &layouts[i]
+								break
+							}
+						}
+					}
+				}
+				if layout != nil {
+					states, serr := tr.qc.GetPieceStates(ctx, torrent.Hash)
+					if serr == nil {
+						localPath := filepath.Join(tr.cfg.StagingDir, tr.task.TaskID, filepath.FromSlash(layout.Path))
+						sp, uerr := su.UploadPending(ctx, tr.task.TaskID, *layout, localPath, toPieceStates(states))
+						if uerr != nil {
+							tr.logger.Warn("segment upload", "error", uerr)
+						}
+						if sp != nil {
+							tr.state.Stream = sp
+						}
+					}
+				}
+			}
+
 			if torrent.Progress >= 1.0 && !isActiveState(string(torrent.State)) {
 				tr.state.ProgressPct = 100
 				tr.state.DownloadSeconds = int(time.Since(tr.state.DownloadStart).Seconds())
+				if tr.state.Stream != nil {
+					tr.state.Stream.Complete = true
+					tr.state.Stream.ContiguousBytes = tr.state.Stream.SizeBytes
+					tr.state.Stream.PercentSeekable = 100
+					tr.state.Stream.PercentDownloaded = 100
+				}
 				tr.logger.Info("download complete", "seconds", tr.state.DownloadSeconds)
 				return nil
 			}

@@ -33,6 +33,19 @@ Settings → Web UI → Authentication → Generate new password/API key.
 make compose-down && make compose-up
 ```
 
+### Доступ к Web UI qBittorrent
+
+| Способ | URL | Когда работает |
+|---|---|---|
+| Локально | `http://localhost:8080` | Всегда, сразу после `compose-up` |
+| По домену | `https://<WORKER_NAME>.w.seans.tedeshi.ru` | DNS `*.w.seans.tedeshi.ru` → IP машины + порт 443 |
+
+Домен формируется из `WORKER_NAME` в `.env`. Например, при `WORKER_NAME=home-pc`
+Web UI будет на `https://home-pc.w.seans.tedeshi.ru`.
+
+Для доступа снаружи нужно, чтобы `*.w.seans.tedeshi.ru` резолвился в IP этой
+машины, и порты 80/443 были доступны (port forwarding / публичный IP / tunnel).
+
 ## Режим разработки (без S3 и реального backend)
 
 Mock backend + локальная загрузка вместо S3:
@@ -79,15 +92,18 @@ export MOCK_MAX_BYTES=5368709120
 |---|---|---|
 | `BACKEND_URL` | — | URL backend API (обязательно) |
 | `WORKER_REGISTER_TOKEN` | — | Общий секрет для register (обязательно) |
-| `WORKER_NAME` | hostname ОС | Имя воркера |
+| `WORKER_NAME` | hostname ОС | Имя воркера; также задаёт домен Web UI `<WORKER_NAME>.w.seans.tedeshi.ru` |
 | `QBIT_URL` | `http://qbittorrent:8080` | Web API qBittorrent |
 | `QBIT_USER` | `admin` | Логин qBittorrent |
 | `QBIT_PASS` | — | Пароль qBittorrent (обязательно) |
 | `QBIT_DOWNLOADS` | `/downloads` | Путь загрузок внутри контейнера qbit |
 | `STAGING_DIR` | `/staging` | Путь staging внутри контейнера агента |
 | `STAGING_HOST_DIR` | — | Host-каталог, монтируемый в оба контейнера |
-| `S3_ACCESS_KEY` | — | Ключ S3 (reg.ru) |
-| `S3_SECRET_KEY` | — | Секрет S3 (reg.ru) |
+| `S3_ACCESS_KEY` | — | Ключ S3 (buckets.ru) |
+| `S3_SECRET_KEY` | — | Секрет S3 (buckets.ru) |
+| `S3_ENDPOINT` | `https://s3.buckets.ru` | S3 API endpoint |
+| `S3_BUCKET` | `seans` | Имя бакета |
+| `S3_REGION` | `ru-1` | Регион S3 |
 | `MOCK_S3` | `false` | Локальная загрузка вместо S3 |
 | `CLAIM_INTERVAL_SEC` | `10` | Интервал запроса задач (сек) |
 | `MAX_CONCURRENT_TASKS` | `1` | Макс. параллельных задач |
@@ -98,6 +114,7 @@ export MOCK_MAX_BYTES=5368709120
 | `DRAIN_ON_SHUTDOWN` | `false` | Дождаться завершения задач при shutdown |
 | `DRAIN_TIMEOUT_SEC` | `3600` | Таймаут drain при shutdown (сек) |
 | `STATE_DIR` | `/state` | Каталог для rclone.conf и логов |
+| `STREAM_SEGMENT_SIZE_MB` | `8` | Размер сегмента для progressive-заливки в S3 (МиБ) |
 
 ## Архитектура
 
@@ -108,7 +125,9 @@ internal/config/            — конфигурация из env
 internal/backend/           — HTTP клиент к backend API
 internal/qbit/              — клиент qBittorrent Web API v2
 internal/engine/            — цикл worker'а и state machine задачи
-internal/s3uploader/        — генерация rclone.conf, вызов rclone move
+internal/media/             — разбор имён файлов (сериалы, озвучки, субтитры)
+internal/stream/            — piece map → seekable prefix, сегменты для progressive upload
+internal/s3uploader/        — генерация rclone.conf, вызов rclone move/copyto
 internal/sysutil/           — утилиты (disk free)
 ```
 

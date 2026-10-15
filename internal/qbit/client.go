@@ -94,6 +94,52 @@ func (c *Client) PauseTorrents(ctx context.Context, hashes string) error {
 	return c.qbt.PauseCtx(ctx, strings.Split(hashes, "|"))
 }
 
+// GetPieceStates returns per-piece download states (0=missing, 1=downloading, 2=done).
+func (c *Client) GetPieceStates(ctx context.Context, hash string) ([]int, error) {
+	states, err := c.qbt.GetTorrentPieceStatesCtx(ctx, hash)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]int, len(states))
+	for i, s := range states {
+		out[i] = int(s)
+	}
+	return out, nil
+}
+
+// GetPieceSize returns torrent piece size in bytes (from torrent properties).
+func (c *Client) GetPieceSize(ctx context.Context, hash string) (int64, error) {
+	props, err := c.qbt.GetTorrentPropertiesCtx(ctx, hash)
+	if err != nil {
+		return 0, err
+	}
+	return int64(props.PieceSize), nil
+}
+
+// EnableSequentialDownload turns on sequential piece download if not already on.
+// Sequential order is required so contiguous prefix grows and players can stream.
+func (c *Client) EnableSequentialDownload(ctx context.Context, hash string) error {
+	torrents, err := c.qbt.GetTorrentsCtx(ctx, qbt.TorrentFilterOptions{})
+	if err != nil {
+		return err
+	}
+	for _, t := range torrents {
+		if t.Hash == hash {
+			if t.SequentialDownload {
+				return nil
+			}
+			break
+		}
+	}
+	return c.qbt.ToggleTorrentSequentialDownloadCtx(ctx, []string{hash})
+}
+
+// EnableFirstLastPiecePrio prioritizes first/last pieces (container index / duration)
+// so media headers become available faster for players.
+func (c *Client) EnableFirstLastPiecePrio(ctx context.Context, hash string) error {
+	return c.qbt.ToggleFirstLastPiecePrioCtx(ctx, []string{hash})
+}
+
 func TempFile(data []byte, suffix string) (string, error) {
 	f, err := os.CreateTemp("", "seans-*"+suffix)
 	if err != nil {

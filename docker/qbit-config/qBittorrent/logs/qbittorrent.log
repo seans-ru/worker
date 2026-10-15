@@ -1,0 +1,248 @@
+(N) 2026-10-09T02:45:30 - qBittorrent v5.2.0 started. Process ID: 158
+(N) 2026-10-09T02:45:30 - Using config directory: /config/qBittorrent
+(N) 2026-10-09T02:45:30 - Trying to listen on the following list of IP addresses: "0.0.0.0:6881,[::]:6881"
+(I) 2026-10-09T02:45:30 - Peer ID: "-qB5200-"
+(I) 2026-10-09T02:45:30 - HTTP User-Agent: "qBittorrent/5.2.0"
+(I) 2026-10-09T02:45:30 - Distributed Hash Table (DHT) support: ON
+(I) 2026-10-09T02:45:30 - Local Peer Discovery support: ON
+(I) 2026-10-09T02:45:30 - Peer Exchange (PeX) support: ON
+(I) 2026-10-09T02:45:30 - Anonymous mode: OFF
+(I) 2026-10-09T02:45:30 - Encryption support: ON
+(W) 2026-10-09T02:45:30 - Couldn't load IP geolocation database. Reason: No such file or directory
+(N) 2026-10-09T02:45:30 - Using built-in WebUI.
+(W) 2026-10-09T02:45:30 - Couldn't load WebUI translation for selected locale (C).
+(N) 2026-10-09T02:45:30 - WebUI: Now listening on IP: *, port: 8080
+(I) 2026-10-09T02:45:30 - Successfully listening on IP. IP: "127.0.0.1". Port: "TCP/6881"
+(I) 2026-10-09T02:45:30 - Successfully listening on IP. IP: "127.0.0.1". Port: "UTP/6881"
+(I) 2026-10-09T02:45:30 - Successfully listening on IP. IP: "172.20.0.2". Port: "TCP/6881"
+(I) 2026-10-09T02:45:30 - Successfully listening on IP. IP: "172.20.0.2". Port: "UTP/6881"
+(I) 2026-10-09T02:45:30 - Successfully listening on IP. IP: "::1". Port: "TCP/6881"
+(I) 2026-10-09T02:45:30 - Successfully listening on IP. IP: "::1". Port: "UTP/6881"
+(I) 2026-10-09T02:45:30 - Detected external IP. IP: "89.179.78.70"
+(I) 2026-10-09T02:45:31 - IP geolocation database loaded. Type: DBIP-Country-Lite. Build time: Thu Oct 1 04:36:12 2026.
+(I) 2026-10-09T02:45:31 - Successfully updated IP geolocation database.
+(N) 2026-10-09T02:46:22 - qBittorrent termination initiated
+(N) 2026-10-09T02:46:22 - Saving resume data completed.
+(N) 2026-10-09T02:46:22 - BitTorrent session successfully finished.
+(N) 2026-10-09T02:46:22 - qBittorrent is now ready to exit
+(N) 2026-10-09T18:25:50 - qBittorrent v5.2.0 started. Process ID: 152
+(N) 2026-10-09T18:25:50 - Using config directory: /config/qBittorrent
+(N) 2026-10-09T18:25:50 - Trying to listen on the following list of IP addresses: "0.0.0.0:6881,[::]:6881"
+(I) 2026-10-09T18:25:50 - Peer ID: "-qB5200-"
+(I) 2026-10-09T18:25:50 - HTTP User-Agent: "qBittorrent/5.2.0"
+(I) 2026-10-09T18:25:50 - Distributed Hash Table (DHT) support: ON
+(I) 2026-10-09T18:25:50 - Local Peer Discovery support: ON
+(I) 2026-10-09T18:25:50 - Peer Exchange (PeX) support: ON
+(I) 2026-10-09T18:25:50 - Anonymous mode: OFF
+(I) 2026-10-09T18:25:50 - Encryption support: ON
+(I) 2026-10-09T18:25:50 - Successfully listening on IP. IP: "127.0.0.1". Port: "TCP/6881"
+(I) 2026-10-09T18:25:50 - Successfully listening on IP. IP: "127.0.0.1". Port: "UTP/6881"
+(I) 2026-10-09T18:25:50 - Successfully listening on IP. IP: "172.20.0.2". Port: "TCP/6881"
+(I) 2026-10-09T18:25:50 - Successfully listening on IP. IP: "172.20.0.2". Port: "UTP/6881"
+(I) 2026-10-09T18:25:50 - Successfully listening on IP. IP: "::1". Port: "TCP/6881"
+(I) 2026-10-09T18:25:50 - Successfully listening on IP. IP: "::1". Port: "UTP/6881"
+(I) 2026-10-09T18:25:50 - IP geolocation database loaded. Type: DBIP-Country-Lite. Build time: Thu Oct 1 04:36:12 2026.
+(N) 2026-10-09T18:25:50 - Using built-in WebUI.
+(W) 2026-10-09T18:25:50 - Couldn't load WebUI translation for selected locale (C).
+(N) 2026-10-09T18:25:50 - WebUI: Now listening on IP: *, port: 8080
+(I) 2026-10-09T18:25:50 - Detected external IP. IP: "89.179.78.70"
+(N) 2026-10-09T18:32:45 - qBittorrent termination initiated
+(N) 2026-10-09T18:32:45 - Saving resume data completed.
+(N) 2026-10-09T18:32:45 - BitTorrent session successfully finished.
+(N) 2026-10-09T18:32:45 - qBittorrent is now ready to exit
+(N) 2026-10-09T18:32:55 - qBittorrent v5.2.0 started. Process ID: 153
+(N) 2026-10-09T18:32:55 - Using config directory: /config/qBittorrent
+(N) 2026-10-09T18:32:55 - Trying to listen on the following list of IP addresses: "0.0.0.0:6881,[::]:6881"
+(I) 2026-10-09T18:32:55 - Peer ID: "-qB5200-"
+(I) 2026-10-09T18:32:55 - HTTP User-Agent: "qBittorrent/5.2.0"
+(I) 2026-10-09T18:32:55 - Distributed Hash Table (DHT) support: ON
+(I) 2026-10-09T18:32:55 - Local Peer Discovery support: ON
+(I) 2026-10-09T18:32:55 - Peer Exchange (PeX) support: ON
+(I) 2026-10-09T18:32:55 - Anonymous mode: OFF
+(I) 2026-10-09T18:32:55 - Encryption support: ON
+(I) 2026-10-09T18:32:55 - Successfully listening on IP. IP: "127.0.0.1". Port: "TCP/6881"
+(I) 2026-10-09T18:32:55 - Successfully listening on IP. IP: "127.0.0.1". Port: "UTP/6881"
+(I) 2026-10-09T18:32:55 - Successfully listening on IP. IP: "172.20.0.2". Port: "TCP/6881"
+(I) 2026-10-09T18:32:55 - Successfully listening on IP. IP: "172.20.0.2". Port: "UTP/6881"
+(I) 2026-10-09T18:32:55 - Successfully listening on IP. IP: "::1". Port: "TCP/6881"
+(I) 2026-10-09T18:32:55 - Successfully listening on IP. IP: "::1". Port: "UTP/6881"
+(I) 2026-10-09T18:32:55 - IP geolocation database loaded. Type: DBIP-Country-Lite. Build time: Thu Oct 1 04:36:12 2026.
+(N) 2026-10-09T18:32:55 - Using built-in WebUI.
+(W) 2026-10-09T18:32:55 - Couldn't load WebUI translation for selected locale (C).
+(N) 2026-10-09T18:32:55 - WebUI: Now listening on IP: *, port: 8080
+(I) 2026-10-09T18:32:56 - Detected external IP. IP: "31.217.179.34"
+(I) 2026-10-09T18:32:58 - Detected external IP. IP: "89.179.78.70"
+(N) 2026-10-09T18:33:13 - WebAPI login success. IP: ::ffff:172.20.0.1
+(N) 2026-10-09T18:34:38 - Added new torrent. Torrent: "Spider.Man.Homecoming.2017.Lic.BDRip.1080p.ExKinoRay.mkv"
+(W) 2026-10-09T18:34:54 - File error alert. Torrent: "Spider.Man.Homecoming.2017.Lic.BDRip.1080p.ExKinoRay.mkv". File: "/downloads/8a2178d7-a6f2-4d39-a581-e6aef2b97528/Spider.Man.Homecoming.2017.Lic.BDRip.1080p.ExKinoRay.mkv". Reason: "Spider.Man.Homecoming.2017.Lic.BDRip.1080p.ExKinoRay.mkv file_write (/downloads/8a2178d7-a6f2-4d39-a581-e6aef2b97528/Spider.Man.Homecoming.2017.Lic.BDRip.1080p.ExKinoRay.mkv) error: No space left on device"
+(N) 2026-10-09T18:35:38 - Torrent removed. Torrent: "Spider.Man.Homecoming.2017.Lic.BDRip.1080p.ExKinoRay.mkv"
+(N) 2026-10-09T18:35:38 - Added new torrent. Torrent: "Spider.Man.Homecoming.2017.Lic.BDRip.1080p.ExKinoRay.mkv"
+(N) 2026-10-09T18:35:38 - Torrent content removed. Torrent: "Spider.Man.Homecoming.2017.Lic.BDRip.1080p.ExKinoRay.mkv"
+(N) 2026-10-09T18:35:48 - Torrent removed. Torrent: "Spider.Man.Homecoming.2017.Lic.BDRip.1080p.ExKinoRay.mkv"
+(N) 2026-10-09T18:35:48 - Added new torrent. Torrent: "Spider.Man.Homecoming.2017.Lic.BDRip.1080p.ExKinoRay.mkv"
+(N) 2026-10-09T18:35:48 - Torrent content removed. Torrent: "Spider.Man.Homecoming.2017.Lic.BDRip.1080p.ExKinoRay.mkv"
+(N) 2026-10-09T18:35:58 - Added new torrent. Torrent: "Spider.Man.Homecoming.2017.1080p_HEVCCLUB.mkv"
+(W) 2026-10-09T18:36:55 - File error alert. Torrent: "Spider.Man.Homecoming.2017.Lic.BDRip.1080p.ExKinoRay.mkv". File: "/downloads/8a2178d7-a6f2-4d39-a581-e6aef2b97528/Spider.Man.Homecoming.2017.Lic.BDRip.1080p.ExKinoRay.mkv". Reason: "Spider.Man.Homecoming.2017.Lic.BDRip.1080p.ExKinoRay.mkv file_write (/downloads/8a2178d7-a6f2-4d39-a581-e6aef2b97528/Spider.Man.Homecoming.2017.Lic.BDRip.1080p.ExKinoRay.mkv) error: No space left on device"
+(N) 2026-10-09T18:38:00 - Torrent removed. Torrent: "Spider.Man.Homecoming.2017.Lic.BDRip.1080p.ExKinoRay.mkv"
+(N) 2026-10-09T18:38:00 - Torrent removed. Torrent: "Spider.Man.Homecoming.2017.1080p_HEVCCLUB.mkv"
+(N) 2026-10-09T18:38:00 - Torrent content removed. Torrent: "Spider.Man.Homecoming.2017.Lic.BDRip.1080p.ExKinoRay.mkv"
+(N) 2026-10-09T18:39:48 - Added new torrent. Torrent: "cad1ab7e6b994ffc51f0eb082a919b7036a85466"
+(N) 2026-10-09T18:44:58 - Torrent removed. Torrent: "cad1ab7e6b994ffc51f0eb082a919b7036a85466"
+(N) 2026-10-09T18:44:58 - Added new torrent. Torrent: "cad1ab7e6b994ffc51f0eb082a919b7036a85466"
+(N) 2026-10-09T18:46:05 - Torrent removed. Torrent: "cad1ab7e6b994ffc51f0eb082a919b7036a85466"
+(N) 2026-10-09T18:50:08 - Added new torrent. Torrent: "cad1ab7e6b994ffc51f0eb082a919b7036a85466"
+(N) 2026-10-09T18:55:18 - Added new torrent. Torrent: "1e851039bb3ab78a1260c27906bd35389394cdef"
+(N) 2026-10-09T18:56:44 - Torrent removed. Torrent: "cad1ab7e6b994ffc51f0eb082a919b7036a85466"
+(N) 2026-10-09T18:56:44 - Torrent removed. Torrent: "Tokyo.Ghoul.S02.2015.BDRip.1080p.JanNYy"
+(N) 2026-10-09T18:56:44 - Torrent content removed. Torrent: "Tokyo.Ghoul.S02.2015.BDRip.1080p.JanNYy"
+(N) 2026-10-09T18:57:48 - Added new torrent. Torrent: "e0335bb75ea66c7b65d04ab325cbaed7ae712db3"
+(W) 2026-10-09T18:59:10 - File error alert. Torrent: "Tokyo.Ghoul.S01.H.264.2014.BDRip". File: "/downloads/407b0408-040e-4bb4-886b-2bcac4ab6165/Tokyo.Ghoul.S01.H.264.2014.BDRip/Tokyo.Ghoul.S01E06.H.264.2014.BDRip.mkv". Reason: "Tokyo.Ghoul.S01.H.264.2014.BDRip file_write (/downloads/407b0408-040e-4bb4-886b-2bcac4ab6165/Tokyo.Ghoul.S01.H.264.2014.BDRip/Tokyo.Ghoul.S01E06.H.264.2014.BDRip.mkv) error: No space left on device"
+(N) 2026-10-09T18:59:48 - Torrent removed. Torrent: "Tokyo.Ghoul.S01.H.264.2014.BDRip"
+(N) 2026-10-09T18:59:48 - Added new torrent. Torrent: "e0335bb75ea66c7b65d04ab325cbaed7ae712db3"
+(N) 2026-10-09T18:59:48 - Torrent content removed. Torrent: "Tokyo.Ghoul.S01.H.264.2014.BDRip"
+(N) 2026-10-09T18:59:58 - Torrent removed. Torrent: "Tokyo.Ghoul.S01.H.264.2014.BDRip"
+(N) 2026-10-09T18:59:58 - Torrent content removed. Torrent: "Tokyo.Ghoul.S01.H.264.2014.BDRip"
+(N) 2026-10-09T18:59:58 - Added new torrent. Torrent: "e0335bb75ea66c7b65d04ab325cbaed7ae712db3"
+(W) 2026-10-09T19:01:47 - File error alert. Torrent: "Tokyo.Ghoul.S01.H.264.2014.BDRip". File: "/downloads/407b0408-040e-4bb4-886b-2bcac4ab6165/Tokyo.Ghoul.S01.H.264.2014.BDRip/Tokyo.Ghoul.S01E10.H.264.2014.BDRip.mkv". Reason: "Tokyo.Ghoul.S01.H.264.2014.BDRip file_write (/downloads/407b0408-040e-4bb4-886b-2bcac4ab6165/Tokyo.Ghoul.S01.H.264.2014.BDRip/Tokyo.Ghoul.S01E10.H.264.2014.BDRip.mkv) error: No space left on device"
+(N) 2026-10-09T19:02:31 - Torrent removed. Torrent: "Tokyo.Ghoul.S01.H.264.2014.BDRip"
+(N) 2026-10-09T19:02:31 - Added new torrent. Torrent: "Tokyo Ghoul_[01-12]_[AniLibria.TV]"
+(N) 2026-10-09T19:02:31 - Torrent content removed. Torrent: "Tokyo.Ghoul.S01.H.264.2014.BDRip"
+(W) 2026-10-09T19:03:22 - File error alert. Torrent: "Tokyo Ghoul_[01-12]_[AniLibria.TV]". File: "/downloads/407b0408-040e-4bb4-886b-2bcac4ab6165/Tokyo Ghoul_[01-12]_[AniLibria.TV]/Tokyo Ghoul - 12 [AniLibria.TV].mkv". Reason: "Tokyo Ghoul_[01-12]_[AniLibria.TV] file_write (/downloads/407b0408-040e-4bb4-886b-2bcac4ab6165/Tokyo Ghoul_[01-12]_[AniLibria.TV]/Tokyo Ghoul - 12 [AniLibria.TV].mkv) error: No space left on device"
+(W) 2026-10-09T19:03:59 - File error alert. Torrent: "Tokyo Ghoul_[01-12]_[AniLibria.TV]". File: "/downloads/407b0408-040e-4bb4-886b-2bcac4ab6165/Tokyo Ghoul_[01-12]_[AniLibria.TV]/Tokyo Ghoul - 05 [AniLibria.TV].mkv". Reason: "Tokyo Ghoul_[01-12]_[AniLibria.TV] file_write (/downloads/407b0408-040e-4bb4-886b-2bcac4ab6165/Tokyo Ghoul_[01-12]_[AniLibria.TV]/Tokyo Ghoul - 05 [AniLibria.TV].mkv) error: No space left on device"
+(N) 2026-10-09T19:04:01 - Torrent removed. Torrent: "Tokyo Ghoul_[01-12]_[AniLibria.TV]"
+(N) 2026-10-09T19:04:01 - Added new torrent. Torrent: "Tokyo Ghoul_[01-12]_[AniLibria.TV]"
+(N) 2026-10-09T19:04:01 - Torrent content removed. Torrent: "Tokyo Ghoul_[01-12]_[AniLibria.TV]"
+(W) 2026-10-09T19:04:42 - File error alert. Torrent: "Tokyo Ghoul_[01-12]_[AniLibria.TV]". File: "/downloads/407b0408-040e-4bb4-886b-2bcac4ab6165/Tokyo Ghoul_[01-12]_[AniLibria.TV]/Tokyo Ghoul - 10 [AniLibria.TV].mkv". Reason: "Tokyo Ghoul_[01-12]_[AniLibria.TV] file_write (/downloads/407b0408-040e-4bb4-886b-2bcac4ab6165/Tokyo Ghoul_[01-12]_[AniLibria.TV]/Tokyo Ghoul - 10 [AniLibria.TV].mkv) error: No space left on device"
+(N) 2026-10-09T19:05:33 - Torrent removed. Torrent: "Tokyo Ghoul_[01-12]_[AniLibria.TV]"
+(N) 2026-10-09T19:05:33 - Torrent content removed. Torrent: "Tokyo Ghoul_[01-12]_[AniLibria.TV]"
+(N) 2026-10-09T19:06:42 - Added new torrent. Torrent: "Tokyo Ghoul (2017) .mkv"
+(N) 2026-10-09T19:13:35 - Torrent removed. Torrent: "Tokyo Ghoul (2017) .mkv"
+(N) 2026-10-09T19:13:35 - Added new torrent. Torrent: "e0335bb75ea66c7b65d04ab325cbaed7ae712db3"
+(N) 2026-10-09T19:18:45 - Torrent removed. Torrent: "e0335bb75ea66c7b65d04ab325cbaed7ae712db3"
+(N) 2026-10-09T19:18:45 - Added new torrent. Torrent: "e0335bb75ea66c7b65d04ab325cbaed7ae712db3"
+(N) 2026-10-09T19:33:25 - qBittorrent termination initiated
+(N) 2026-10-09T19:33:25 - Saving resume data completed.
+(N) 2026-10-09T19:33:26 - BitTorrent session successfully finished.
+(N) 2026-10-09T19:33:26 - qBittorrent is now ready to exit
+(N) 2026-10-13T14:19:01 - qBittorrent v5.2.0 started. Process ID: 151
+(N) 2026-10-13T14:19:01 - Using config directory: /config/qBittorrent
+(N) 2026-10-13T14:19:01 - Trying to listen on the following list of IP addresses: "0.0.0.0:6881,[::]:6881"
+(I) 2026-10-13T14:19:01 - Peer ID: "-qB5200-"
+(I) 2026-10-13T14:19:01 - HTTP User-Agent: "qBittorrent/5.2.0"
+(I) 2026-10-13T14:19:01 - Distributed Hash Table (DHT) support: ON
+(I) 2026-10-13T14:19:01 - Local Peer Discovery support: ON
+(I) 2026-10-13T14:19:01 - Peer Exchange (PeX) support: ON
+(I) 2026-10-13T14:19:01 - Anonymous mode: OFF
+(I) 2026-10-13T14:19:01 - Encryption support: ON
+(I) 2026-10-13T14:19:01 - Successfully listening on IP. IP: "127.0.0.1". Port: "TCP/6881"
+(I) 2026-10-13T14:19:01 - Successfully listening on IP. IP: "127.0.0.1". Port: "UTP/6881"
+(I) 2026-10-13T14:19:01 - Successfully listening on IP. IP: "172.20.0.2". Port: "TCP/6881"
+(I) 2026-10-13T14:19:01 - Successfully listening on IP. IP: "172.20.0.2". Port: "UTP/6881"
+(I) 2026-10-13T14:19:01 - Successfully listening on IP. IP: "::1". Port: "TCP/6881"
+(I) 2026-10-13T14:19:01 - Successfully listening on IP. IP: "::1". Port: "UTP/6881"
+(N) 2026-10-13T14:19:01 - Restored torrent. Torrent: "e0335bb75ea66c7b65d04ab325cbaed7ae712db3"
+(I) 2026-10-13T14:19:01 - IP geolocation database loaded. Type: DBIP-Country-Lite. Build time: Thu Oct 1 04:36:12 2026.
+(N) 2026-10-13T14:19:01 - Using built-in WebUI.
+(W) 2026-10-13T14:19:01 - Couldn't load WebUI translation for selected locale (C).
+(N) 2026-10-13T14:19:01 - WebUI: Now listening on IP: *, port: 8080
+(I) 2026-10-13T14:19:01 - Detected external IP. IP: "89.179.78.70"
+(W) 2026-10-13T14:19:48 - WebAPI login failure. Reason: invalid credentials, attempt count: 1, IP: ::ffff:172.20.0.1, username: admin
+(N) 2026-10-13T14:19:52 - WebAPI login success. IP: ::ffff:172.20.0.1
+(N) 2026-10-13T14:20:03 - Перевод веб-интерфейса для выбранного языка (ru) успешно подгружен.
+(N) 2026-10-13T14:20:51 - Попытка прослушивания следующего списка IP-адресов: «0.0.0.0:47200,[::]:47200»
+(I) 2026-10-13T14:20:51 - Поддержка UPnP/NAT-PMP: ВКЛ
+(I) 2026-10-13T14:20:51 - Успешное прослушивание IP. IP: «127.0.0.1». Порт: «TCP/47200»
+(I) 2026-10-13T14:20:51 - Успешное прослушивание IP. IP: «127.0.0.1». Порт: «UTP/47200»
+(I) 2026-10-13T14:20:51 - Успешное прослушивание IP. IP: «172.20.0.2». Порт: «TCP/47200»
+(I) 2026-10-13T14:20:51 - Успешное прослушивание IP. IP: «172.20.0.2». Порт: «UTP/47200»
+(I) 2026-10-13T14:20:51 - Успешное прослушивание IP. IP: «::1». Порт: «TCP/47200»
+(I) 2026-10-13T14:20:51 - Успешное прослушивание IP. IP: «::1». Порт: «UTP/47200»
+(W) 2026-10-13T14:23:27 - Проброс портов UPnP/NAT-PMP не удался. Сообщение: «could not map port using UPnP[172.20.0.2]: no router found»
+(W) 2026-10-13T14:23:27 - Проброс портов UPnP/NAT-PMP не удался. Сообщение: «could not map port using UPnP[172.20.0.2]: no router found»
+(W) 2026-10-13T14:30:45 - Ошибка входа WebAPI. Причина: неверные учётные данные, попыток: 1, IP: ::ffff:172.20.0.1, имя пользователя: admin
+(N) 2026-10-13T14:36:24 - Завершение qBittorrent начато
+(N) 2026-10-13T14:36:24 - Запись данных возобновления завершена.
+(N) 2026-10-13T14:36:24 - Сеанс БитТоррента успешно завершён.
+(N) 2026-10-13T14:36:24 - qBittorrent теперь готов к завершению работы
+(N) 2026-10-13T14:36:50 - qBittorrent v5.2.0 запущен. Идентификатор процесса: 154
+(N) 2026-10-13T14:36:50 - Используется каталог настроек: /config/qBittorrent
+(N) 2026-10-13T14:36:50 - Попытка прослушивания следующего списка IP-адресов: «0.0.0.0:6881,[::]:6881»
+(I) 2026-10-13T14:36:50 - Идентификатор пира: «-qB5200-»
+(I) 2026-10-13T14:36:50 - HTTP User-Agent: «qBittorrent/5.2.0»
+(I) 2026-10-13T14:36:50 - Поддержка распределённой хеш-таблицы (DHT): ВКЛ
+(I) 2026-10-13T14:36:50 - Поддержка обнаружения локальных пиров: ВКЛ
+(I) 2026-10-13T14:36:50 - Поддержка обмена пирами (PeX): ВКЛ
+(I) 2026-10-13T14:36:50 - Анонимный режим: ОТКЛ
+(I) 2026-10-13T14:36:50 - Поддержка шифрования: ВКЛ
+(I) 2026-10-13T14:36:50 - Успешное прослушивание IP. IP: «127.0.0.1». Порт: «TCP/6881»
+(I) 2026-10-13T14:36:50 - Успешное прослушивание IP. IP: «127.0.0.1». Порт: «UTP/6881»
+(I) 2026-10-13T14:36:50 - Успешное прослушивание IP. IP: «172.20.0.2». Порт: «TCP/6881»
+(I) 2026-10-13T14:36:50 - Успешное прослушивание IP. IP: «172.20.0.2». Порт: «UTP/6881»
+(I) 2026-10-13T14:36:50 - Успешное прослушивание IP. IP: «::1». Порт: «TCP/6881»
+(I) 2026-10-13T14:36:50 - Успешное прослушивание IP. IP: «::1». Порт: «UTP/6881»
+(N) 2026-10-13T14:36:50 - Торрент восстановлен. Торрент: «e0335bb75ea66c7b65d04ab325cbaed7ae712db3»
+(I) 2026-10-13T14:36:50 - База данных геолокации IP загружена. Тип: DBIP-Country-Lite. Дата построения: Thu Oct 1 04:36:12 2026.
+(N) 2026-10-13T14:36:50 - Используется встроенный веб-интерфейс.
+(N) 2026-10-13T14:36:50 - Перевод веб-интерфейса для выбранного языка (ru) успешно подгружен.
+(N) 2026-10-13T14:36:50 - Веб-интерфейс: Сейчас прослушивается IP: *, порт: 8080
+(I) 2026-10-13T14:36:50 - Обнаружен внешний IP. IP: «89.179.78.70»
+(N) 2026-10-13T14:41:22 - Успешный вход в WebAPI. IP: ::ffff:172.20.0.1
+(N) 2026-10-13T14:42:08 - Успешный вход в WebAPI. IP: ::ffff:172.20.0.1
+(N) 2026-10-13T14:43:13 - Успешный вход в WebAPI. IP: ::ffff:172.20.0.1
+(N) 2026-10-13T14:43:14 - Добавлен новый торрент. Торрент: «Человек.паук.Новый день.2026..2026.DUB.WEB-DLRip.x264.seleZen.mkv.torrent»
+(N) 2026-10-13T14:44:20 - Успешный вход в WebAPI. IP: ::ffff:172.20.0.1
+(W) 2026-10-13T14:44:37 - Ошибка входа WebAPI. Причина: неверные учётные данные, попыток: 1, IP: ::ffff:172.20.0.1, имя пользователя: admin
+(N) 2026-10-13T14:45:04 - Успешный вход в WebAPI. IP: ::ffff:172.20.0.1
+(N) 2026-10-13T14:45:23 - Успешный вход в WebAPI. IP: ::ffff:172.20.0.1
+(N) 2026-10-13T14:45:34 - Успешный вход в WebAPI. IP: ::ffff:172.20.0.1
+(N) 2026-10-13T14:45:59 - Загрузка торрента завершена. Торрент: «Человек.паук.Новый день.2026..2026.DUB.WEB-DLRip.x264.seleZen.mkv.torrent»
+(N) 2026-10-13T14:46:04 - Успешный вход в WebAPI. IP: ::ffff:172.20.0.1
+(N) 2026-10-13T14:46:22 - Торрент удалён. Торрент: «Tokyo.Ghoul.S01.H.264.2014.BDRip»
+(N) 2026-10-13T14:46:22 - Содержимое торрента удалено. Торрент: «Tokyo.Ghoul.S01.H.264.2014.BDRip»
+(N) 2026-10-13T14:51:00 - Добавлен новый торрент. Торрент: «e0335bb75ea66c7b65d04ab325cbaed7ae712db3»
+(N) 2026-10-13T15:19:48 - Завершение qBittorrent начато
+(N) 2026-10-13T15:19:48 - Запись данных возобновления завершена.
+(N) 2026-10-15T22:37:11 - qBittorrent v5.2.0 запущен. Идентификатор процесса: 152
+(N) 2026-10-15T22:37:11 - Используется каталог настроек: /config/qBittorrent
+(N) 2026-10-15T22:37:11 - Попытка прослушивания следующего списка IP-адресов: «0.0.0.0:6881,[::]:6881»
+(I) 2026-10-15T22:37:11 - Идентификатор пира: «-qB5200-»
+(I) 2026-10-15T22:37:11 - HTTP User-Agent: «qBittorrent/5.2.0»
+(I) 2026-10-15T22:37:11 - Поддержка распределённой хеш-таблицы (DHT): ВКЛ
+(I) 2026-10-15T22:37:11 - Поддержка обнаружения локальных пиров: ВКЛ
+(I) 2026-10-15T22:37:11 - Поддержка обмена пирами (PeX): ВКЛ
+(I) 2026-10-15T22:37:11 - Анонимный режим: ОТКЛ
+(I) 2026-10-15T22:37:11 - Поддержка шифрования: ВКЛ
+(I) 2026-10-15T22:37:11 - Успешное прослушивание IP. IP: «127.0.0.1». Порт: «TCP/6881»
+(I) 2026-10-15T22:37:11 - Успешное прослушивание IP. IP: «127.0.0.1». Порт: «UTP/6881»
+(I) 2026-10-15T22:37:11 - Успешное прослушивание IP. IP: «172.20.0.2». Порт: «TCP/6881»
+(I) 2026-10-15T22:37:11 - Успешное прослушивание IP. IP: «172.20.0.2». Порт: «UTP/6881»
+(I) 2026-10-15T22:37:11 - Успешное прослушивание IP. IP: «::1». Порт: «TCP/6881»
+(I) 2026-10-15T22:37:11 - Успешное прослушивание IP. IP: «::1». Порт: «UTP/6881»
+(N) 2026-10-15T22:37:11 - Торрент восстановлен. Торрент: «Tokyo.Ghoul.S01.H.264.2014.BDRip»
+(N) 2026-10-15T22:37:11 - Торрент восстановлен. Торрент: «Человек.паук.Новый день.2026..2026.DUB.WEB-DLRip.x264.seleZen.mkv.torrent»
+(I) 2026-10-15T22:37:11 - База данных геолокации IP загружена. Тип: DBIP-Country-Lite. Дата построения: Thu Oct 1 04:36:12 2026.
+(N) 2026-10-15T22:37:11 - Используется встроенный веб-интерфейс.
+(N) 2026-10-15T22:37:11 - Перевод веб-интерфейса для выбранного языка (ru) успешно подгружен.
+(N) 2026-10-15T22:37:11 - Веб-интерфейс: Сейчас прослушивается IP: *, порт: 8080
+(I) 2026-10-15T22:37:12 - Обнаружен внешний IP. IP: «89.179.78.70»
+(N) 2026-10-15T22:37:23 - Торрент удалён. Торрент: «Tokyo.Ghoul.S01.H.264.2014.BDRip»
+(N) 2026-10-15T22:37:23 - Добавлен новый торрент. Торрент: «e0335bb75ea66c7b65d04ab325cbaed7ae712db3»
+(N) 2026-10-15T22:37:23 - Содержимое торрента удалено. Торрент: «Tokyo.Ghoul.S01.H.264.2014.BDRip»
+(N) 2026-10-15T22:37:30 - Успешный вход в WebAPI. IP: ::ffff:172.20.0.1
+(N) 2026-10-15T22:37:42 - Торрент удалён. Торрент: «e0335bb75ea66c7b65d04ab325cbaed7ae712db3»
+(N) 2026-10-15T22:37:42 - Торрент удалён. Торрент: «Человек.паук.Новый день.2026..2026.DUB.WEB-DLRip.x264.seleZen.mkv.torrent»
+(N) 2026-10-15T22:37:42 - Содержимое торрента удалено. Торрент: «Человек.паук.Новый день.2026..2026.DUB.WEB-DLRip.x264.seleZen.mkv.torrent»
+(N) 2026-10-15T22:39:19 - Добавлен новый торрент. Торрент: «Spider-Man Brand New Day (2026) [1080p] [WEBRip] [5.1]»
+(N) 2026-10-15T22:44:45 - Торрент удалён. Торрент: «Spider-Man Brand New Day (2026) [1080p] [WEBRip] [5.1]»
+(N) 2026-10-15T22:44:45 - Добавлен новый торрент. Торрент: «rutor.info»
+(N) 2026-10-15T22:44:45 - Содержимое торрента удалено. Торрент: «Spider-Man Brand New Day (2026) [1080p] [WEBRip] [5.1]»
+(N) 2026-10-15T22:47:26 - Загрузка торрента завершена. Торрент: «rutor.info»
+(N) 2026-10-15T22:47:45 - Торрент удалён. Торрент: «rutor.info»
+(N) 2026-10-15T22:47:45 - Добавлен новый торрент. Торрент: «rutor.info»
+(N) 2026-10-15T22:47:45 - Содержимое торрента удалено. Торрент: «rutor.info»
+(N) 2026-10-15T22:48:25 - Торрент удалён. Торрент: «rutor.info»
+(N) 2026-10-15T22:48:26 - Содержимое торрента удалено. Торрент: «rutor.info»
+(N) 2026-10-15T22:57:24 - Завершение qBittorrent начато
+(N) 2026-10-15T22:57:24 - Запись данных возобновления завершена.
+(N) 2026-10-15T22:57:24 - Сеанс БитТоррента успешно завершён.
+(N) 2026-10-15T22:57:24 - qBittorrent теперь готов к завершению работы
