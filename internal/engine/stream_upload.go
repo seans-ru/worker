@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -19,28 +20,37 @@ type streamUploader struct {
 	uploader *s3uploader.Uploader
 	destPrefix string // e.g. "users/{task_id}/"
 	logFile    string
+	logger     *slog.Logger
 
 	segmentSize int64
 	// uploaded maps file index -> set of uploaded segment indices
 	uploaded map[int]map[int]string
+	// lastContiguous tracks last published seekable prefix to avoid redundant index uploads
+	lastContiguous map[int]int64
 }
 
-func newStreamUploader(up *s3uploader.Uploader, destPrefix string, segmentSize int64, logFile string) *streamUploader {
+func newStreamUploader(up *s3uploader.Uploader, destPrefix string, segmentSize int64, logFile string, logger *slog.Logger) *streamUploader {
 	if segmentSize <= 0 {
 		segmentSize = stream.DefaultSegmentSize
 	}
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return &streamUploader{
-		uploader:    up,
-		destPrefix:  destPrefix,
-		logFile:     logFile,
-		segmentSize: segmentSize,
-		uploaded:    make(map[int]map[int]string),
+		uploader:       up,
+		destPrefix:     destPrefix,
+		logFile:        logFile,
+		logger:         logger,
+		segmentSize:    segmentSize,
+		uploaded:       make(map[int]map[int]string),
+		lastContiguous: make(map[int]int64),
 	}
 }
 
 // streamFileKey returns the object key prefix for one torrent file's stream segments.
+// Uses "stream/" (no leading dot) — safer on S3-compatible stores.
 func (s *streamUploader) streamFileKey(fileIndex int) string {
-	return fmt.Sprintf("%s.stream/f%04d/", s.destPrefix, fileIndex)
+	return fmt.Sprintf("%sstream/f%04d/", s.destPrefix, fileIndex)
 }
 
 // segmentKey is the object key for a single segment.
@@ -70,8 +80,12 @@ type StreamIndex struct {
 	UpdatedAt         time.Time               `json:"updated_at"`
 }
 
-// UploadPending reads the local file, uploads any newly available segments,
-// and refreshes the stream index. Returns the current progress snapshot.
+// UploadPending uploads newly available segments (bounded per call) and
+// refreshes the stream index. Returns the current progress snapshot.
+//
+// If the file is already fully available locally (contiguous == size), remaining
+// segments are NOT uploaded here — the final rclone move will ship the full
+// object. Progressive segments exist only for playback while downloading.
 func (s *streamUploader) UploadPending(
 	ctx context.Context,
 	taskID string,
@@ -85,8 +99,21 @@ func (s *streamUploader) UploadPending(
 
 	fp := stream.BuildProgress(layout, states, s.segmentSize, s.uploaded[layout.Index])
 
+	// File already fully present: skip the rest of the segments.
+	if fp.Complete {
+		return s.finalize(ctx, taskID, layout, fp)
+	}
+
 	pending := stream.NextUploadable(fp)
+	// Keep the poll loop responsive: at most maxSegmentsPerCall uploads per tick.
+	const maxSegmentsPerCall = 2
+	if len(pending) > maxSegmentsPerCall {
+		pending = pending[:maxSegmentsPerCall]
+	}
+
+	uploadedNow := 0
 	for _, seg := range pending {
+		start := time.Now()
 		if err := s.uploadSegment(ctx, layout, localPath, seg); err != nil {
 			// non-fatal: retry next tick
 			return progressFrom(fp, layout), fmt.Errorf("upload segment %d: %w", seg.Index, err)
@@ -95,8 +122,79 @@ func (s *streamUploader) UploadPending(
 		s.uploaded[layout.Index][seg.Index] = key
 		fp.Segments[seg.Index].Uploaded = true
 		fp.Segments[seg.Index].S3Key = key
+		uploadedNow++
+		s.logger.Info("stream: segment uploaded",
+			"file", layout.Path,
+			"segment", seg.Index,
+			"bytes", seg.End-seg.Start,
+			"range", fmt.Sprintf("[%d,%d)", seg.Start, seg.End),
+			"s3_key", key,
+			"took_ms", time.Since(start).Milliseconds(),
+		)
 	}
 
+	// Upload index when anything changed (new segments or seekable prefix grew).
+	idxChanged := uploadedNow > 0 || s.lastContiguous[layout.Index] != fp.ContiguousBytes
+	if idxChanged {
+		s.lastContiguous[layout.Index] = fp.ContiguousBytes
+		if err := s.publishIndex(ctx, taskID, layout, fp); err != nil {
+			return progressFrom(fp, layout), err
+		}
+	}
+
+	return progressFrom(fp, layout), nil
+}
+
+// Finalize marks the stream complete (all bytes seekable) and publishes the
+// index. Call this when the torrent is done; no more segment uploads.
+func (s *streamUploader) Finalize(ctx context.Context, taskID string, layout stream.FileLayout, states []stream.PieceState) (*backend.StreamProgress, error) {
+	if _, ok := s.uploaded[layout.Index]; !ok {
+		s.uploaded[layout.Index] = make(map[int]string)
+	}
+	fp := stream.BuildProgress(layout, states, s.segmentSize, s.uploaded[layout.Index])
+	return s.finalize(ctx, taskID, layout, fp)
+}
+
+func (s *streamUploader) finalize(ctx context.Context, taskID string, layout stream.FileLayout, fp stream.FileProgress) (*backend.StreamProgress, error) {
+	skipped := 0
+	for _, seg := range fp.Segments {
+		if !seg.Uploaded {
+			skipped++
+		}
+	}
+	if skipped > 0 {
+		s.logger.Info("stream: skip remaining segments (file complete, final upload covers it)",
+			"file", layout.Path,
+			"skipped_segments", skipped,
+		)
+	}
+
+	// Treat the whole file as seekable/complete; leftover segment objects are optional.
+	for i := range fp.Segments {
+		if !fp.Segments[i].Available {
+			// pieces should all be downloaded when complete; mark anyway
+			fp.Segments[i].Available = true
+		}
+	}
+	fp.ContiguousBytes = fp.Size
+	fp.PercentSeekable = 100
+	fp.PercentDownloaded = 100
+	fp.Complete = true
+
+	s.lastContiguous[layout.Index] = fp.ContiguousBytes
+	if err := s.publishIndex(ctx, taskID, layout, fp); err != nil {
+		return progressFrom(fp, layout), err
+	}
+	sp := progressFrom(fp, layout)
+	sp.Complete = true
+	sp.ContiguousBytes = layout.Size
+	sp.PercentSeekable = 100
+	sp.PercentDownloaded = 100
+	sp.StreamReady = false
+	return sp, nil
+}
+
+func (s *streamUploader) publishIndex(ctx context.Context, taskID string, layout stream.FileLayout, fp stream.FileProgress) error {
 	idx := StreamIndex{
 		TaskID:            taskID,
 		FilePath:          layout.Path,
@@ -112,10 +210,9 @@ func (s *streamUploader) UploadPending(
 		UpdatedAt:         time.Now().UTC(),
 	}
 	if err := s.uploader.UploadJSON(ctx, s.indexKey(layout.Index), idx, s.logFile); err != nil {
-		return progressFrom(fp, layout), fmt.Errorf("upload stream index: %w", err)
+		return fmt.Errorf("upload stream index: %w", err)
 	}
-
-	return progressFrom(fp, layout), nil
+	return nil
 }
 
 func (s *streamUploader) uploadSegment(ctx context.Context, layout stream.FileLayout, localPath string, seg stream.SegmentStatus) error {

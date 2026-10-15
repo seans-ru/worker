@@ -101,9 +101,11 @@ func (u *Uploader) runRclone(ctx context.Context, localPath, remotePath, logFile
 		remotePath,
 		"--transfers", "4",
 		"--checkers", "8",
-		"--s3-chunk-size", "64M",
-		"--s3-upload-concurrency", "4",
-		"--s3-acl", "private",
+		// Single PUT up to 1 GiB — avoids CreateMultipartUpload (403 on some
+		// S3-compatible accounts that allow PutObject only). S3 hard limit for
+		// one PUT is 5 GiB; typical BluRay rips fit. Raise cutoff only if needed.
+		"--s3-upload-cutoff", "1G",
+		"--s3-no-check-bucket",
 		"--fast-list",
 		"-v",
 		"--stats", "15s",
@@ -155,9 +157,12 @@ func (u *Uploader) runRclone(ctx context.Context, localPath, remotePath, logFile
 
 // remotePath builds the rclone remote path for destPrefix (S3 key prefix).
 func (u *Uploader) remotePath(destPrefix string) string {
+	// Normalize to forward slashes for object keys.
+	destPrefix = strings.ReplaceAll(destPrefix, "\\", "/")
+	destPrefix = strings.TrimPrefix(destPrefix, "/")
 	if u.mockS3 {
-		p := filepath.Join("/tmp/seans-s3-mock", destPrefix)
-		os.MkdirAll(filepath.Dir(p), 0o755)
+		p := filepath.Join("/tmp/seans-s3-mock", filepath.FromSlash(destPrefix))
+		_ = os.MkdirAll(filepath.Dir(p), 0o755)
 		return p
 	}
 	return "seans:" + u.bucket + "/" + destPrefix
@@ -165,33 +170,49 @@ func (u *Uploader) remotePath(destPrefix string) string {
 
 // UploadFile uploads a single local file to destKey (object key / path suffix).
 // destKey should use forward slashes, e.g. "users/task/stream/seg_000001".
+//
+// Segments are uploaded with a single PUT (no multipart): some S3-compatible
+// accounts (e.g. buckets.ru) allow PutObject but reject CreateMultipartUpload.
+// stderr/stdout are captured into the returned error (do not send --log-file here).
 func (u *Uploader) UploadFile(ctx context.Context, localPath, destKey string, logFile string) error {
 	remote := u.remotePath(destKey)
-	if err := os.MkdirAll(filepath.Dir(remote), 0o755); err != nil && !u.mockS3 {
-		// remote dir only matters for mock local backend
-		_ = err
-	}
 	args := []string{
 		"copyto",
 		localPath,
 		remote,
-		"--s3-chunk-size", "16M",
-		"--s3-upload-concurrency", "2",
-		"--s3-acl", "private",
 		"--low-level-retries", "3",
 		"--retries", "2",
-		"-v",
+		"--log-level", "INFO",
 	}
-	if logFile != "" {
-		args = append(args, "--log-file", logFile)
+	// Force single-part PUT for anything below the cutoff (default stream segment is 8 MiB).
+	// Default rclone cutoff is ~5 MiB, so 8 MiB segments would otherwise use multipart and get 403.
+	if !u.mockS3 {
+		args = append(args,
+			"--s3-upload-cutoff", "128M",
+			"--s3-no-check-bucket",
+		)
 	}
 	cmd := exec.CommandContext(ctx, "rclone", args...)
 	cmd.Env = append(os.Environ(), "RCLONE_CONFIG="+u.configPath)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("rclone copyto %s: %w: %s", destKey, err, truncate(string(out), 400))
+		return fmt.Errorf("rclone copyto -> %s: %w | %s", remote, err, truncate(strings.TrimSpace(string(out)), 800))
+	}
+	// Optional verbose trail for operators.
+	if logFile != "" {
+		_ = appendFileLine(logFile, "copyto ok: "+localPath+" -> "+remote+"\n")
 	}
 	return nil
+}
+
+func appendFileLine(path, line string) error {
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.WriteString(line)
+	return err
 }
 
 // UploadJSON writes v as JSON to a small object at destKey (stream index / manifest).

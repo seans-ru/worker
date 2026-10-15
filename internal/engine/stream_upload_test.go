@@ -47,10 +47,10 @@ func TestProgressFromSeekLimit(t *testing.T) {
 
 func TestStreamFileKey(t *testing.T) {
 	su := &streamUploader{destPrefix: "users/tsk_001/"}
-	if got := su.segmentKey(3, 12); got != "users/tsk_001/.stream/f0003/seg_00012.bin" {
+	if got := su.segmentKey(3, 12); got != "users/tsk_001/stream/f0003/seg_00012.bin" {
 		t.Errorf("segmentKey=%s", got)
 	}
-	if got := su.indexKey(3); got != "users/tsk_001/.stream/f0003/index.json" {
+	if got := su.indexKey(3); got != "users/tsk_001/stream/f0003/index.json" {
 		t.Errorf("indexKey=%s", got)
 	}
 }

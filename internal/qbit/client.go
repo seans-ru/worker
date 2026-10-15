@@ -136,7 +136,20 @@ func (c *Client) EnableSequentialDownload(ctx context.Context, hash string) erro
 
 // EnableFirstLastPiecePrio prioritizes first/last pieces (container index / duration)
 // so media headers become available faster for players.
+// Safe to call multiple times: only toggles when currently off.
 func (c *Client) EnableFirstLastPiecePrio(ctx context.Context, hash string) error {
+	torrents, err := c.qbt.GetTorrentsCtx(ctx, qbt.TorrentFilterOptions{})
+	if err != nil {
+		return err
+	}
+	for _, t := range torrents {
+		if t.Hash == hash {
+			if t.FirstLastPiecePrio {
+				return nil
+			}
+			break
+		}
+	}
 	return c.qbt.ToggleFirstLastPiecePrioCtx(ctx, []string{hash})
 }
 

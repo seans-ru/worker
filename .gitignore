@@ -1,2 +1,9 @@
 agent.exe
 .env
+
+# qBittorrent runtime / logs (not source)
+docker/qbit-config/qBittorrent/logs/
+docker/qbit-config/qBittorrent/BT_backup/
+docker/qbit-config/qBittorrent/ipc-socket
+docker/qbit-config/qBittorrent/lockfile
+docker/qbit-config/qBittorrent/.cache/

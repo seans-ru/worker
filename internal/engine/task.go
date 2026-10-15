@@ -313,12 +313,15 @@ func (tr *taskRunner) download(ctx context.Context) error {
 	tr.state.Stage = StageDownloading
 	tr.state.DownloadStart = time.Now()
 	tr.state.Message = "downloading torrent"
-	tr.logger.Info("download started")
+	tr.logger.Info("download started",
+		"stream_file_index", tr.state.StreamFileIndex,
+		"segment_size", tr.cfg.StreamSegmentSize,
+	)
 
 	// Progressive S3 segment upload while downloading.
 	destPrefix := "users/" + tr.task.TaskID + "/"
 	logFile := filepath.Join(tr.cfg.StateDir, "rclone.log")
-	su := newStreamUploader(tr.uploader, destPrefix, tr.cfg.StreamSegmentSize, logFile)
+	su := newStreamUploader(tr.uploader, destPrefix, tr.cfg.StreamSegmentSize, logFile, tr.logger)
 
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
@@ -330,6 +333,16 @@ func (tr *taskRunner) download(ctx context.Context) error {
 	// Layouts built once piece size is known.
 	var layout *stream.FileLayout
 	var layouts []stream.FileLayout
+	var streamReadyLogged bool
+	var lastContiguous int64
+	var lastSegUploads int
+
+	if tr.state.StreamFileIndex < 0 {
+		tr.logger.Warn("stream upload disabled: no primary video file selected")
+	} else if tr.state.StreamFileIndex >= len(tr.state.Files) {
+		tr.logger.Warn("stream upload disabled: stream_file_index out of range",
+			"stream_file_index", tr.state.StreamFileIndex, "files", len(tr.state.Files))
+	}
 
 	for {
 		select {
@@ -363,11 +376,38 @@ func (tr *taskRunner) download(ctx context.Context) error {
 				return &TaskError{Reason: "stalled: no download progress", Permanent: true}
 			}
 
-			// Progressive segment upload for the primary video file.
+			downloadDone := torrent.Progress >= 1.0 && !isActiveState(string(torrent.State))
+
+			// Progressive segment upload only while the torrent is still downloading.
+			// Once done — skip remaining segments (final rclone move ships the full object).
+			if downloadDone {
+				tr.state.ProgressPct = 100
+				tr.state.DownloadSeconds = int(time.Since(tr.state.DownloadStart).Seconds())
+				if layout != nil {
+					states, serr := tr.qc.GetPieceStates(ctx, torrent.Hash)
+					if serr == nil {
+						if sp, ferr := su.Finalize(ctx, tr.task.TaskID, *layout, toPieceStates(states)); ferr == nil && sp != nil {
+							tr.state.Stream = sp
+						}
+					} else if tr.state.Stream != nil {
+						tr.state.Stream.Complete = true
+						tr.state.Stream.ContiguousBytes = tr.state.Stream.SizeBytes
+						tr.state.Stream.PercentSeekable = 100
+						tr.state.Stream.PercentDownloaded = 100
+					}
+				}
+				tr.logger.Info("download complete", "seconds", tr.state.DownloadSeconds)
+				return nil
+			}
+
 			if tr.state.StreamFileIndex >= 0 && tr.state.StreamFileIndex < len(tr.state.Files) {
 				if layouts == nil {
 					pieceSize, perr := tr.qc.GetPieceSize(ctx, torrent.Hash)
-					if perr == nil && pieceSize > 0 {
+					if perr != nil {
+						tr.logger.Warn("stream: get piece size failed", "error", perr)
+					} else if pieceSize <= 0 {
+						tr.logger.Warn("stream: invalid piece size", "piece_size", pieceSize)
+					} else {
 						layouts = fileLayoutsFromQBit(tr.state.Files, pieceSize)
 						for i := range layouts {
 							if layouts[i].Index == tr.state.StreamFileIndex {
@@ -375,34 +415,57 @@ func (tr *taskRunner) download(ctx context.Context) error {
 								break
 							}
 						}
+						if layout == nil {
+							tr.logger.Warn("stream: no layout for stream file",
+								"stream_file_index", tr.state.StreamFileIndex, "layouts", len(layouts))
+						} else {
+							tr.logger.Info("stream: layout ready",
+								"file", layout.Path,
+								"size_bytes", layout.Size,
+								"piece_size", layout.PieceSize,
+								"piece_range", fmt.Sprintf("%d-%d", layout.PieceStart, layout.PieceEnd),
+								"local_path", filepath.Join(tr.cfg.StagingDir, tr.task.TaskID, filepath.FromSlash(layout.Path)),
+							)
+						}
 					}
 				}
 				if layout != nil {
 					states, serr := tr.qc.GetPieceStates(ctx, torrent.Hash)
-					if serr == nil {
+					if serr != nil {
+						tr.logger.Warn("stream: get piece states failed", "error", serr)
+					} else {
 						localPath := filepath.Join(tr.cfg.StagingDir, tr.task.TaskID, filepath.FromSlash(layout.Path))
 						sp, uerr := su.UploadPending(ctx, tr.task.TaskID, *layout, localPath, toPieceStates(states))
 						if uerr != nil {
-							tr.logger.Warn("segment upload", "error", uerr)
+							tr.logger.Warn("stream: segment upload failed", "error", uerr)
 						}
 						if sp != nil {
 							tr.state.Stream = sp
+							uploadsNow := sp.SegmentsUploaded
+							if uploadsNow > lastSegUploads || sp.ContiguousBytes > lastContiguous {
+								tr.logger.Info("stream: progress",
+									"file", sp.FilePath,
+									"segments_uploaded", sp.SegmentsUploaded,
+									"segments_available", sp.SegmentsAvailable,
+									"segments_total", sp.SegmentsTotal,
+									"contiguous_bytes", sp.ContiguousBytes,
+									"percent_seekable", fmt.Sprintf("%.2f", sp.PercentSeekable),
+									"percent_downloaded", fmt.Sprintf("%.2f", sp.PercentDownloaded),
+									"stream_ready", sp.StreamReady,
+								)
+								lastSegUploads = uploadsNow
+								lastContiguous = sp.ContiguousBytes
+							}
+							if sp.StreamReady && !streamReadyLogged {
+								tr.logger.Info("stream: ready for playback",
+									"contiguous_bytes", sp.ContiguousBytes,
+									"max_seekable_bytes", sp.ContiguousBytes,
+								)
+								streamReadyLogged = true
+							}
 						}
 					}
 				}
-			}
-
-			if torrent.Progress >= 1.0 && !isActiveState(string(torrent.State)) {
-				tr.state.ProgressPct = 100
-				tr.state.DownloadSeconds = int(time.Since(tr.state.DownloadStart).Seconds())
-				if tr.state.Stream != nil {
-					tr.state.Stream.Complete = true
-					tr.state.Stream.ContiguousBytes = tr.state.Stream.SizeBytes
-					tr.state.Stream.PercentSeekable = 100
-					tr.state.Stream.PercentDownloaded = 100
-				}
-				tr.logger.Info("download complete", "seconds", tr.state.DownloadSeconds)
-				return nil
 			}
 		}
 	}
