@@ -36,14 +36,14 @@ const (
 )
 
 const (
-	FlagDub        = "dub"         // дубляж / DUB / Dubbed
-	FlagVoice      = "voice"       // многоголосый / VO / Voice-over
-	FlagOneVoice   = "one_voice"   // одноголосый
-	FlagOriginal   = "original"    // оригинал / ORIG / Original
-	FlagSubbed     = "sub"         // субтитры-оригинал
-	FlagDualAudio  = "dual_audio"  // Multi / Dual / 2xRus
-	FlagStudioDub  = "studio_dub"  // Лостфилм, Амедиа, ...
-	FlagSecondary  = "secondary"   // sample / trailer / extras
+	FlagDub       = "dub"        // дубляж / DUB / Dubbed
+	FlagVoice     = "voice"      // многоголосый / VO / Voice-over
+	FlagOneVoice  = "one_voice"  // одноголосый
+	FlagOriginal  = "original"   // оригинал / ORIG / Original
+	FlagSubbed    = "sub"        // субтитры-оригинал
+	FlagDualAudio = "dual_audio" // Multi / Dual / 2xRus
+	FlagStudioDub = "studio_dub" // Лостфилм, Амедиа, ...
+	FlagSecondary = "secondary"  // sample / trailer / extras
 )
 
 var (
@@ -60,11 +60,11 @@ var (
 		".idx": true, ".sup": true, ".smi": true,
 	}
 
-	reSeasonEp = regexp.MustCompile(`(?i)(?:^|[^a-z0-9])(?:s(\d{1,2})\s*[._-]?\s*e(\d{1,3}(?:\s*-\s*e?\d{1,3})?|e\d{1,3}(?:\s*e\d{1,3})*))`)
-	reSxxExx   = regexp.MustCompile(`(?i)\bs(\d{1,2})\s*e(\d{1,3})(?:\s*[-–]\s*e?(\d{1,3}))?`)
-	reNxNN     = regexp.MustCompile(`(?:^|[^\d])(\d{1,2})x(\d{2,3})(?:[^\d]|$)`)
-	reEpOnly   = regexp.MustCompile(`(?i)(?:^|[^a-z0-9])(?:ep?|episode|ep\.|серия|серия\.|сер\.?)(?:\s|._-)*(\d{1,3})(?:[^\d]|$)`)
-	reBracketEp = regexp.MustCompile(`\[` + `(?:` + `(?:EP?|EPISODE|С)\s*` + `)?` + `(\d{1,3})` + `(?:\s*v\d)?` + `\]`)
+	reSeasonEp   = regexp.MustCompile(`(?i)(?:^|[^a-z0-9])(?:s(\d{1,2})\s*[._-]?\s*e(\d{1,3}(?:\s*-\s*e?\d{1,3})?|e\d{1,3}(?:\s*e\d{1,3})*))`)
+	reSxxExx     = regexp.MustCompile(`(?i)\bs(\d{1,2})\s*e(\d{1,3})(?:\s*[-–]\s*e?(\d{1,3}))?`)
+	reNxNN       = regexp.MustCompile(`(?:^|[^\d])(\d{1,2})x(\d{2,3})(?:[^\d]|$)`)
+	reEpOnly     = regexp.MustCompile(`(?i)(?:^|[^a-z0-9])(?:ep?|episode|ep\.|серия|серия\.|сер\.?)(?:\s|._-)*(\d{1,3})(?:[^\d]|$)`)
+	reBracketEp  = regexp.MustCompile(`\[` + `(?:` + `(?:EP?|EPISODE|С)\s*` + `)?` + `(\d{1,3})` + `(?:\s*v\d)?` + `\]`)
 	reSeasonWord = regexp.MustCompile(`(?i)(?:^|[^a-z0-9])(?:season|сезон)\s*(\d{1,2})(?:[^\d]|$)`)
 	reYear       = regexp.MustCompile(`(?:^|[^\d])((?:19|20)\d{2})(?:[^\d]|$)`)
 
@@ -73,20 +73,20 @@ var (
 
 // FileMeta is the classification of a single torrent path.
 type FileMeta struct {
-	Path     string
-	Name     string // base name
-	Ext      string
-	Kind     FileKind
-	Size     int64
-	Index    int
+	Path  string
+	Name  string // base name
+	Ext   string
+	Kind  FileKind
+	Size  int64
+	Index int
 
 	// Series
-	Season       int
-	Episode      int
-	EpisodeEnd   int // multi-episode end; 0 if single
-	IsSeries     bool
-	IsMovie      bool
-	MovieYear    int
+	Season     int
+	Episode    int
+	EpisodeEnd int // multi-episode end; 0 if single
+	IsSeries   bool
+	IsMovie    bool
+	MovieYear  int
 
 	// Audio / track naming (works for external audio and for dual-audio video names)
 	Language TrackLanguage
@@ -95,8 +95,8 @@ type FileMeta struct {
 
 // EpisodeKey groups files belonging to the same episode (or movie).
 type EpisodeKey struct {
-	Season  int
-	Episode int // start episode; 0 for movie
+	Season    int
+	Episode   int // start episode; 0 for movie
 	MovieYear int
 }
 
@@ -116,10 +116,15 @@ type EpisodeGroup struct {
 
 // MediaCatalog is the parsed view of a torrent's file list.
 type MediaCatalog struct {
-	Files    []*FileMeta
-	Groups   []*EpisodeGroup
+	Files  []*FileMeta
+	Groups []*EpisodeGroup
 	// Unknown are non-media files kept for upload completeness.
 	Unknown []*FileMeta
+
+	// filtered is true when task file_paths restricted the selection.
+	filtered bool
+	// matched maps file Index -> selected when filtered (all kinds, incl. other).
+	matched map[int]bool
 }
 
 // ParsePath classifies a single torrent-relative path.
@@ -329,14 +334,18 @@ func hasFlag(flags []string, f string) bool {
 }
 
 // Classify parses all files and groups them into playable episodes/movies.
-// primaryFilter, if non-nil, restricts which paths are considered selected
-// (task file_paths). When empty, all media files are considered.
+// primaryFilter is the task file_paths list: empty means full torrent; non-empty
+// selects only matching paths (same contract as backend apply_manifest).
 func Classify(paths []string, sizes []int64, primaryFilter []string) *MediaCatalog {
-	cat := &MediaCatalog{}
-	want := make(map[string]bool, len(primaryFilter))
+	cat := &MediaCatalog{matched: map[int]bool{}}
+	filterOn := false
 	for _, p := range primaryFilter {
-		want[normalizePath(p)] = true
+		if p != "" {
+			filterOn = true
+			break
+		}
 	}
+	cat.filtered = filterOn
 
 	byKey := map[EpisodeKey]*EpisodeGroup{}
 	var order []EpisodeKey
@@ -349,15 +358,13 @@ func Classify(paths []string, sizes []int64, primaryFilter []string) *MediaCatal
 		m := ParsePath(p, size, i)
 		cat.Files = append(cat.Files, m)
 
-		if m.Kind == KindOther {
-			if len(want) == 0 || want[normalizePath(m.Path)] {
-				cat.Unknown = append(cat.Unknown, m)
-			}
+		if !MatchSelected(m.Path, primaryFilter) {
 			continue
 		}
+		cat.matched[m.Index] = true
 
-		if len(want) > 0 && !want[normalizePath(m.Path)] {
-			// Keep unmatched extras out of groups but still classified.
+		if m.Kind == KindOther {
+			cat.Unknown = append(cat.Unknown, m)
 			continue
 		}
 
@@ -477,9 +484,61 @@ func normalizePath(p string) string {
 	return p
 }
 
+// HasPathFilter reports whether the task file_paths list is a real selection
+// (non-empty after dropping blank entries). False means full torrent.
+func HasPathFilter(selected []string) bool {
+	for _, s := range selected {
+		if s != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// MatchSelected reports whether a torrent path is selected by task file_paths.
+// Empty (or blank-only) selected means the full torrent. Non-empty uses the
+// same tolerant match as backend apply_manifest: equal after normalizing
+// separators, or /-suffix on either side (so "ep01.mkv" matches
+// "Show/Season 1/ep01.mkv" and vice versa).
+func MatchSelected(path string, selected []string) bool {
+	p := normalizePath(path)
+	matchedAny := false
+	for _, s := range selected {
+		s = normalizePath(s)
+		if s == "" {
+			continue
+		}
+		matchedAny = true
+		if p == s || strings.HasSuffix(p, "/"+s) || strings.HasSuffix(s, "/"+p) {
+			return true
+		}
+	}
+	// Blank-only / empty list means full torrent.
+	return !matchedAny
+}
+
 // SelectDownloadPriorities returns torrent file indices to enable (priority>0).
 // Primary videos first, then external audio, then subs; samples skipped unless requested.
+// When task file_paths filtered the catalog, only matched files are selected
+// (any kind) so download/upload stays limited to the request.
 func (c *MediaCatalog) SelectDownloadPriorities(includeAll bool) (selected []int, primary []int) {
+	if c.filtered {
+		for _, f := range c.Files {
+			if c.matched[f.Index] {
+				selected = append(selected, f.Index)
+			}
+		}
+		var vids []*FileMeta
+		for _, f := range c.Files {
+			if c.matched[f.Index] && f.Kind == KindVideo {
+				vids = append(vids, f)
+			}
+		}
+		if p := pickPrimaryVideo(vids); p != nil {
+			primary = append(primary, p.Index)
+		}
+		return selected, primary
+	}
 	for _, g := range c.Groups {
 		if g.Primary != nil {
 			primary = append(primary, g.Primary.Index)

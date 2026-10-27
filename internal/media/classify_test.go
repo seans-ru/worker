@@ -168,6 +168,102 @@ func TestClassifyPrimaryFilter(t *testing.T) {
 	}
 }
 
+func TestMatchSelected(t *testing.T) {
+	cases := []struct {
+		name     string
+		path     string
+		selected []string
+		want     bool
+	}{
+		{"empty filter matches all", "Show/ep.mkv", nil, true},
+		{"blank-only filter matches all", "Show/ep.mkv", []string{""}, true},
+		{"exact", "Show/ep.mkv", []string{"Show/ep.mkv"}, true},
+		{"backslash normalized", `Show\ep.mkv`, []string{"Show/ep.mkv"}, true},
+		{"short name suffix", "Show/Season 1/ep.mkv", []string{"ep.mkv"}, true},
+		{"long name suffix", "ep.mkv", []string{"Show/Season 1/ep.mkv"}, true},
+		{"other file not selected", "Show/other.mkv", []string{"ep.mkv"}, false},
+		{"partial name not selected", "Show/ep2.mkv", []string{"ep.mkv"}, false},
+		{"one of many", "b/S01E02.mkv", []string{"a/S01E01.mkv", "b/S01E02.mkv"}, true},
+	}
+	for _, tc := range cases {
+		if got := MatchSelected(tc.path, tc.selected); got != tc.want {
+			t.Errorf("%s: MatchSelected(%q, %v)=%v want %v",
+				tc.name, tc.path, tc.selected, got, tc.want)
+		}
+	}
+}
+
+func TestHasPathFilter(t *testing.T) {
+	if HasPathFilter(nil) {
+		t.Error("nil should be full torrent")
+	}
+	if HasPathFilter([]string{""}) {
+		t.Error("empty string should not enable filter")
+	}
+	if !HasPathFilter([]string{"ep.mkv"}) {
+		t.Error("non-empty path should enable filter")
+	}
+	if !HasPathFilter([]string{"", "ep.mkv"}) {
+		t.Error("mixed blank+path should enable filter")
+	}
+}
+
+func TestClassifyPrimaryFilterSuffixMatch(t *testing.T) {
+	paths := []string{
+		"Show/Season 1/Show.S01E01.1080p.mkv",
+		"Show/Season 1/Show.S01E01.rus.srt",
+		"Show/Season 1/Show.S01E02.1080p.mkv",
+	}
+	sizes := []int64{10, 2, 20}
+	// Short client paths must match full torrent-relative paths (backend contract).
+	cat := Classify(paths, sizes, []string{"Show.S01E01.1080p.mkv", "Show.S01E01.rus.srt"})
+	selected, primary := cat.SelectDownloadPriorities(false)
+	if len(selected) != 2 {
+		t.Fatalf("selected=%v want 2 (ep01 video + srt)", selected)
+	}
+	if len(primary) != 1 || primary[0] != 0 {
+		t.Errorf("primary=%v want [0]", primary)
+	}
+	// ep02 must not be selected
+	for _, idx := range selected {
+		if idx == 2 {
+			t.Errorf("ep02 (index 2) must not be selected")
+		}
+	}
+}
+
+func TestSelectDownloadPrioritiesFilterIncludesOther(t *testing.T) {
+	paths := []string{
+		"movie.mkv",
+		"movie.nfo",
+		"other.txt",
+	}
+	sizes := []int64{100, 1, 1}
+	cat := Classify(paths, sizes, []string{"movie.mkv", "movie.nfo"})
+	selected, primary := cat.SelectDownloadPriorities(false)
+	if len(selected) != 2 {
+		t.Fatalf("selected=%v want 2 (mkv+nfo)", selected)
+	}
+	if len(primary) != 1 || primary[0] != 0 {
+		t.Errorf("primary=%v want [0]", primary)
+	}
+	for _, idx := range selected {
+		if idx == 2 {
+			t.Errorf("unselected other.txt must not be in selected")
+		}
+	}
+}
+
+func TestSelectDownloadPrioritiesFilterNoMatch(t *testing.T) {
+	paths := []string{"movie.mkv", "other.mkv"}
+	sizes := []int64{1, 1}
+	cat := Classify(paths, sizes, []string{"missing.mkv"})
+	selected, _ := cat.SelectDownloadPriorities(false)
+	if len(selected) != 0 {
+		t.Fatalf("selected=%v want empty (prepare must fail the task)", selected)
+	}
+}
+
 func TestPickPrimaryVideoLargest(t *testing.T) {
 	videos := []*FileMeta{
 		{Name: "small.mkv", Size: 100, Index: 0},

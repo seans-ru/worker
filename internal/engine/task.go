@@ -29,17 +29,17 @@ const (
 )
 
 type TaskState struct {
-	TaskID       string
-	Stage        Stage
-	ProgressPct  float64
-	SpeedMbps    float64
-	ETAMin       int
-	Message      string
-	TorrentHash  string
-	Files        []qbit.TorrentFile
-	StartedAt    time.Time
-	DownloadStart time.Time
-	UploadStart   time.Time
+	TaskID          string
+	Stage           Stage
+	ProgressPct     float64
+	SpeedMbps       float64
+	ETAMin          int
+	Message         string
+	TorrentHash     string
+	Files           []qbit.TorrentFile
+	StartedAt       time.Time
+	DownloadStart   time.Time
+	UploadStart     time.Time
 	DownloadSeconds int
 	UploadSeconds   int
 
@@ -49,6 +49,9 @@ type TaskState struct {
 	StreamFileIndex int
 	// SegmentSize for progressive S3 upload (0 = default).
 	SegmentSize int64
+	// Selected holds torrent file indices the task will download/upload
+	// (honors claim file_paths; empty selection with a non-empty filter fails).
+	Selected map[int]bool
 }
 
 type taskRunner struct {
@@ -145,6 +148,19 @@ func (tr *taskRunner) prepare(ctx context.Context) error {
 	cat := media.Classify(paths, sizes, tr.task.FilePaths)
 	selected, primary := cat.SelectDownloadPriorities(false)
 
+	// Non-empty file_paths must match at least one torrent file; otherwise the
+	// task cannot honor the request (do not fall back to the full torrent).
+	if media.HasPathFilter(tr.task.FilePaths) && len(selected) == 0 {
+		return &TaskError{
+			Reason:    "no files matched task.file_paths",
+			Permanent: true,
+		}
+	}
+	tr.state.Selected = make(map[int]bool, len(selected))
+	for _, idx := range selected {
+		tr.state.Selected[idx] = true
+	}
+
 	// Enable selected files; skip samples unless explicitly requested.
 	if len(selected) > 0 {
 		if err := tr.qc.SetFilePriority(ctx, torrent.Hash, selected, 1); err != nil {
@@ -195,23 +211,27 @@ func (tr *taskRunner) prepare(ctx context.Context) error {
 	}
 	tr.state.SegmentSize = tr.cfg.StreamSegmentSize
 
-	// Send manifest to backend and get upload slots
-	manifestFiles := make([]backend.ManifestFile, 0, len(files))
+	// Send manifest to backend and get upload slots. Only report files this
+	// task will actually download/upload (claim file_paths / media selection).
+	manifestFiles := make([]backend.ManifestFile, 0, len(selected))
 	for _, f := range files {
+		if !tr.state.Selected[f.Index] {
+			continue
+		}
 		m := media.ParsePath(f.Name, f.Size, f.Index)
 		kind := string(m.Kind)
 		lang := string(m.Language)
 		isPrimary := m.Index == tr.state.StreamFileIndex && m.Kind == media.KindVideo
 		mf := backend.ManifestFile{
-			Path:      f.Name,
-			SizeBytes: f.Size,
-			Kind:      kind,
-			Season:    m.Season,
-			Episode:   m.Episode,
+			Path:       f.Name,
+			SizeBytes:  f.Size,
+			Kind:       kind,
+			Season:     m.Season,
+			Episode:    m.Episode,
 			EpisodeEnd: m.EpisodeEnd,
-			Language:  lang,
-			Flags:     m.Flags,
-			Primary:   isPrimary,
+			Language:   lang,
+			Flags:      m.Flags,
+			Primary:    isPrimary,
 		}
 		manifestFiles = append(manifestFiles, mf)
 	}
@@ -510,12 +530,14 @@ func (tr *taskRunner) upload(ctx context.Context) error {
 func (tr *taskRunner) complete(ctx context.Context) {
 	files := make([]backend.FileInfo, 0)
 	for _, f := range tr.state.Files {
-		if f.Priority > 0 {
-			files = append(files, backend.FileInfo{
-				Path:      f.Name,
-				SizeBytes: f.Size,
-			})
+		// Only files this task selected (file_paths / media pick) were downloaded.
+		if tr.state.Selected != nil && !tr.state.Selected[f.Index] {
+			continue
 		}
+		files = append(files, backend.FileInfo{
+			Path:      f.Name,
+			SizeBytes: f.Size,
+		})
 	}
 
 	if err := tr.bc.Complete(ctx, tr.task.TaskID, files); err != nil {

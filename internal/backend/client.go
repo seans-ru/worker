@@ -13,11 +13,15 @@ import (
 )
 
 // Task represents a claimed task from the backend.
+//
+// FilePaths is the claim-time file selection from POST /api/tasks:
+// empty means the full torrent; non-empty MUST limit which torrent files
+// this worker downloads and uploads (tolerant path match — see media.MatchSelected).
 type Task struct {
-	TaskID      string   `json:"task_id"`
-	Magnet      string   `json:"magnet"`
-	MediaTitle  string   `json:"media_title"`
-	FilePaths   []string `json:"file_paths"`
+	TaskID      string       `json:"task_id"`
+	Magnet      string       `json:"magnet"`
+	MediaTitle  string       `json:"media_title"`
+	FilePaths   []string     `json:"file_paths"`
 	UploadSlots []UploadSlot `json:"upload_slots"`
 }
 
@@ -29,38 +33,38 @@ type UploadSlot struct {
 }
 
 type FileInfo struct {
-	Path     string `json:"path"`
-	S3Key    string `json:"s3_key,omitempty"`
+	Path      string `json:"path"`
+	S3Key     string `json:"s3_key,omitempty"`
 	SizeBytes int64  `json:"size_bytes,omitempty"`
 }
 
 // ManifestFile is one torrent file reported to backend after metadata.
 type ManifestFile struct {
-	Path      string `json:"path"`
-	SizeBytes int64  `json:"size_bytes"`
-	Kind      string `json:"kind,omitempty"` // video|audio|subtitle|other
-	Season    int    `json:"season,omitempty"`
-	Episode   int    `json:"episode,omitempty"`
-	EpisodeEnd int   `json:"episode_end,omitempty"`
-	Language  string `json:"language,omitempty"`
-	Flags     []string `json:"flags,omitempty"`
-	Primary   bool   `json:"primary,omitempty"`
+	Path       string   `json:"path"`
+	SizeBytes  int64    `json:"size_bytes"`
+	Kind       string   `json:"kind,omitempty"` // video|audio|subtitle|other
+	Season     int      `json:"season,omitempty"`
+	Episode    int      `json:"episode,omitempty"`
+	EpisodeEnd int      `json:"episode_end,omitempty"`
+	Language   string   `json:"language,omitempty"`
+	Flags      []string `json:"flags,omitempty"`
+	Primary    bool     `json:"primary,omitempty"`
 }
 
 // StreamProgress reports progressive download / seek window for playback.
 type StreamProgress struct {
-	FilePath            string  `json:"file_path"`
-	SizeBytes           int64   `json:"size_bytes"`
-	ContiguousBytes     int64   `json:"contiguous_bytes"` // max seekable offset (exclusive)
-	DownloadedBytes     int64   `json:"downloaded_bytes"`
-	PercentDownloaded   float64 `json:"percent_downloaded"`
-	PercentSeekable     float64 `json:"percent_seekable"`
-	SegmentSize         int64   `json:"segment_size"`
-	SegmentsTotal       int     `json:"segments_total"`
-	SegmentsUploaded    int     `json:"segments_uploaded"`
-	SegmentsAvailable   int     `json:"segments_available"`
-	StreamReady         bool    `json:"stream_ready"` // enough prefix to start playback
-	Complete            bool    `json:"complete"`
+	FilePath          string  `json:"file_path"`
+	SizeBytes         int64   `json:"size_bytes"`
+	ContiguousBytes   int64   `json:"contiguous_bytes"` // max seekable offset (exclusive)
+	DownloadedBytes   int64   `json:"downloaded_bytes"`
+	PercentDownloaded float64 `json:"percent_downloaded"`
+	PercentSeekable   float64 `json:"percent_seekable"`
+	SegmentSize       int64   `json:"segment_size"`
+	SegmentsTotal     int     `json:"segments_total"`
+	SegmentsUploaded  int     `json:"segments_uploaded"`
+	SegmentsAvailable int     `json:"segments_available"`
+	StreamReady       bool    `json:"stream_ready"` // enough prefix to start playback
+	Complete          bool    `json:"complete"`
 }
 
 type HeartbeatTask struct {
@@ -86,7 +90,7 @@ type Client struct {
 
 func New(baseURL, regSecret string, logger *slog.Logger) *Client {
 	return &Client{
-		baseURL:  baseURL,
+		baseURL:   baseURL,
 		regSecret: regSecret,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
@@ -196,8 +200,8 @@ func (c *Client) Manifest(ctx context.Context, taskID string, files []ManifestFi
 			continue
 		}
 		slot := UploadSlot{
-			Path:  fmt.Sprintf("%v", sm["path"]),
-			S3Key: fmt.Sprintf("%v", sm["s3_key"]),
+			Path:   fmt.Sprintf("%v", sm["path"]),
+			S3Key:  fmt.Sprintf("%v", sm["s3_key"]),
 			PutURL: fmt.Sprintf("%v", sm["put_url"]),
 		}
 		if hdrs, ok := sm["headers"].(map[string]any); ok {
