@@ -18,6 +18,13 @@ services:
       - ${STAGING_HOST_DIR:-/mnt/staging}:/downloads
     restart: unless-stopped
     mem_limit: 1g
+    # WebUI answers 200 on / once qBittorrent is fully up (API itself needs auth).
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
 
   caddy:
     image: caddy:2-alpine
@@ -33,7 +40,8 @@ services:
       - caddy-config:/config
     restart: unless-stopped
     depends_on:
-      - qbittorrent
+      qbittorrent:
+        condition: service_healthy
 
   agent:
     build:
@@ -47,7 +55,8 @@ services:
     restart: unless-stopped
     mem_limit: 128m
     depends_on:
-      - qbittorrent
+      qbittorrent:
+        condition: service_healthy
 
 volumes:
   agent-state:
