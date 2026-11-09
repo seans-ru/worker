@@ -24,24 +24,39 @@ func TestProgressFromSeekLimit(t *testing.T) {
 		Index: 0, Path: "movie.mkv", Size: 100,
 		Offset: 0, PieceStart: 0, PieceEnd: 3, PieceSize: 32,
 	}
-	// Only first two pieces downloaded -> contiguous 64, not complete
-	fp := stream.BuildProgress(layout, []stream.PieceState{
+	states := []stream.PieceState{
 		stream.PieceDownloaded, stream.PieceDownloaded, stream.PieceMissing, stream.PieceMissing,
-	}, 32, map[int]string{})
+	}
 
+	// Nothing uploaded yet: nothing is seekable on S3 even though 64 bytes
+	// are downloaded locally.
+	fp := stream.BuildProgress(layout, states, 32, map[int]string{})
 	sp := progressFrom(fp, layout)
+	if sp.ContiguousBytes != 0 {
+		t.Errorf("contiguous=%d want 0 (no segments on S3 yet)", sp.ContiguousBytes)
+	}
+	if sp.Complete {
+		t.Error("should not be complete")
+	}
+	if sp.SizeBytes != 100 {
+		t.Errorf("size=%d want 100", sp.SizeBytes)
+	}
+
+	// First two segments uploaded -> seekable prefix 64.
+	fp = stream.BuildProgress(layout, states, 32, map[int]string{0: "k0", 1: "k1"})
+	sp = progressFrom(fp, layout)
 	if sp.ContiguousBytes != 64 {
 		t.Errorf("contiguous=%d want 64", sp.ContiguousBytes)
 	}
 	if sp.Complete {
 		t.Error("should not be complete")
 	}
-	if sp.SizeBytes != 100 {
-		t.Errorf("size=%d", sp.SizeBytes)
-	}
 	// Critical: clients must only seek within [0, ContiguousBytes)
 	if sp.ContiguousBytes > sp.SizeBytes {
 		t.Error("contiguous exceeds file size")
+	}
+	if !sp.StreamReady {
+		t.Error("uploaded prefix should make the stream ready")
 	}
 }
 

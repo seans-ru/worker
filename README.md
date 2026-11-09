@@ -53,35 +53,6 @@ Web UI будет на `https://home-pc.w.seans.tedeshi.ru`.
 Для доступа снаружи нужно, чтобы `*.w.seans.tedeshi.ru` резолвился в IP этой
 машины, и порты 80/443 были доступны (port forwarding / публичный IP / tunnel).
 
-## Режим разработки (без S3 и реального backend)
-
-Mock backend + локальная загрузка вместо S3:
-
-```bash
-# В .env:
-# MOCK_S3=true
-# BACKEND_URL=http://host.docker.internal:9999
-
-# Запустить mock backend на хосте
-make mock
-
-# В другом терминале — docker compose
-make compose-up
-```
-
-### Тестовый торрент
-
-Для разработки используйте официальный образ Ubuntu:
-`https://releases.ubuntu.com/24.04/ubuntu-24.04.3-desktop-amd64.iso.torrent`
-
-Настройте mock backend через переменные окружения:
-```bash
-export MOCK_TORRENT_KIND=file_b64
-export MOCK_TORRENT_DATA=<URL .torrent файла>
-export MOCK_DEST_PREFIX=media/users/u_mock/md_ubuntu/s1/
-export MOCK_MAX_BYTES=5368709120
-```
-
 ## Команды
 
 | Команда | Описание |
@@ -91,7 +62,6 @@ export MOCK_MAX_BYTES=5368709120
 | `make vet` | Проверить `go vet` |
 | `make compose-up` | Запустить qbit + agent через docker compose |
 | `make compose-down` | Остановить все сервисы |
-| `make mock` | Запустить mock backend на хосте |
 
 ## Переменные окружения
 
@@ -111,7 +81,6 @@ export MOCK_MAX_BYTES=5368709120
 | `S3_ENDPOINT` | `https://s3.buckets.ru` | S3 API endpoint |
 | `S3_BUCKET` | `seans` | Имя бакета |
 | `S3_REGION` | `ru-1` | Регион S3 |
-| `MOCK_S3` | `false` | Локальная загрузка вместо S3 |
 | `CLAIM_INTERVAL_SEC` | `10` | Интервал запроса задач (сек) |
 | `MAX_CONCURRENT_TASKS` | `1` | Макс. параллельных задач |
 | `HEARTBEAT_INTERVAL_SEC` | `60` | Интервал heartbeat (сек) |
@@ -127,14 +96,13 @@ export MOCK_MAX_BYTES=5368709120
 
 ```
 cmd/agent/main.go          — entrypoint воркера
-cmd/mockbackend/main.go    — mock backend для разработки
 internal/config/            — конфигурация из env
 internal/backend/           — HTTP клиент к backend API
 internal/qbit/              — клиент qBittorrent Web API v2
 internal/engine/            — цикл worker'а и state machine задачи
 internal/media/             — разбор имён файлов (сериалы, озвучки, субтитры)
 internal/stream/            — piece map → seekable prefix, сегменты для progressive upload
-internal/s3uploader/        — генерация rclone.conf, вызов rclone move/copyto
+internal/s3uploader/        — генерация rclone.conf, вызов rclone copyto
 internal/sysutil/           — утилиты (disk free)
 ```
 

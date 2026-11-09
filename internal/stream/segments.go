@@ -11,9 +11,9 @@ import (
 type PieceState int
 
 const (
-	PieceMissing    PieceState = 0
+	PieceMissing     PieceState = 0
 	PieceDownloading PieceState = 1
-	PieceDownloaded PieceState = 2
+	PieceDownloaded  PieceState = 2
 )
 
 // DefaultSegmentSize is 8 MiB — large enough for efficient S3 PUTs,
@@ -260,4 +260,18 @@ func NextUploadable(fp FileProgress) []SegmentStatus {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Index < out[j].Index })
 	return out
+}
+
+// UploadedContiguousBytes returns how many bytes from the start of the file
+// are fully in object storage (contiguous uploaded segments). This is the
+// max seekable offset for players reading from S3.
+func UploadedContiguousBytes(fp FileProgress) int64 {
+	var n int64
+	for _, s := range fp.Segments {
+		if !s.Uploaded {
+			break
+		}
+		n = s.End
+	}
+	return n
 }
