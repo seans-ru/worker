@@ -105,6 +105,10 @@ Web UI будет на `https://home-pc.w.seans.tedeshi.ru`.
 | `DRAIN_TIMEOUT_SEC` | `3600` | Таймаут drain при shutdown (сек) |
 | `STATE_DIR` | `/state` | Каталог для rclone.conf и логов |
 | `STREAM_SEGMENT_SIZE_MB` | `8` | Размер сегмента для progressive-заливки в S3 (МиБ) |
+| `TRANSCODE_ENABLED` | `false` | Собирать HLS-лестницу качеств (ABR) |
+| `FFMPEG_PATH` | `ffmpeg` | Путь к ffmpeg для транскода |
+| `TRANSCODE_ENCODER` | `libx264` | Видеокодер: `libx264` или `h264_nvenc` |
+| `TRANSCODE_SEGMENT_SEC` | `4` | Длительность HLS-сегмента (сек) |
 
 ## Архитектура
 
