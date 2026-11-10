@@ -5,6 +5,7 @@ package media
 import (
 	"path"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -578,4 +579,113 @@ func (c *MediaCatalog) FirstPlayable() *EpisodeGroup {
 		}
 	}
 	return nil
+}
+
+// qBittorrent WebAPI file priority levels (torrents/filePrio).
+const (
+	FilePrioSkip    = 0 // do not download
+	FilePrioNormal  = 1
+	FilePrioHigh    = 6
+	FilePrioMaximal = 7
+)
+
+// RankedGroups returns playable groups (those with a primary video) in
+// priority order: series sorted by (season, episode), movies by year.
+// The first group is the most important one — it is downloaded and uploaded
+// before the rest.
+func (c *MediaCatalog) RankedGroups() []*EpisodeGroup {
+	out := make([]*EpisodeGroup, 0, len(c.Groups))
+	for _, g := range c.Groups {
+		if g.Primary != nil {
+			out = append(out, g)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := out[i].Key, out[j].Key
+		if a.Season != b.Season {
+			return a.Season < b.Season
+		}
+		if a.Episode != b.Episode {
+			return a.Episode < b.Episode
+		}
+		return a.MovieYear < b.MovieYear
+	})
+	return out
+}
+
+// DownloadPriorities maps file index -> qBittorrent file priority:
+// first ranked group -> maximal (critical), second -> high, every other
+// selected file -> normal, unselected files -> skip. Sidecars (external
+// audio, subtitles) inherit their group's level.
+//
+// When the backend starts sending per-file priorities in the claim, merge
+// them here and keep this heuristic only as the fallback.
+func (c *MediaCatalog) DownloadPriorities() map[int]int {
+	selected, _ := c.SelectDownloadPriorities(false)
+	prio := make(map[int]int, len(c.Files))
+	for _, f := range c.Files {
+		prio[f.Index] = FilePrioSkip
+	}
+	sel := make(map[int]bool, len(selected))
+	for _, idx := range selected {
+		sel[idx] = true
+	}
+	// Ranks count only groups that actually contribute selected files, so the
+	// first downloaded episode is critical even when earlier episodes were
+	// filtered out by task file_paths.
+	rank := -1
+	for _, g := range c.RankedGroups() {
+		idxs := groupFileIndices(g)
+		contributes := false
+		for _, idx := range idxs {
+			if sel[idx] {
+				contributes = true
+				break
+			}
+		}
+		if !contributes {
+			continue
+		}
+		rank++
+		level := GroupLevel(rank)
+		for _, idx := range idxs {
+			if sel[idx] {
+				prio[idx] = level
+			}
+		}
+	}
+	// Selected files not attached to a ranked group stay normal.
+	for _, idx := range selected {
+		if prio[idx] == FilePrioSkip {
+			prio[idx] = FilePrioNormal
+		}
+	}
+	return prio
+}
+
+// GroupLevel returns the download/upload priority level of the ranked group
+// (0 = critical, 1 = high, >=2 = normal) for a group at the given rank.
+func GroupLevel(rank int) int {
+	switch rank {
+	case 0:
+		return FilePrioMaximal
+	case 1:
+		return FilePrioHigh
+	default:
+		return FilePrioNormal
+	}
+}
+
+func groupFileIndices(g *EpisodeGroup) []int {
+	out := make([]int, 0, len(g.Videos)+len(g.ExternalAudio)+len(g.Subtitles))
+	for _, v := range g.Videos {
+		out = append(out, v.Index)
+	}
+	for _, a := range g.ExternalAudio {
+		out = append(out, a.Index)
+	}
+	for _, s := range g.Subtitles {
+		out = append(out, s.Index)
+	}
+	return out
 }

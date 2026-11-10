@@ -288,3 +288,78 @@ func TestAnimeBracketEpisode(t *testing.T) {
 		t.Errorf("episode=%d", m.Episode)
 	}
 }
+
+func TestDownloadPrioritiesEpisodeOrder(t *testing.T) {
+	paths := []string{
+		"Show/Season 1/Show.S01E01.mkv",
+		"Show/Season 1/Show.S01E01.rus.srt",
+		"Show/Season 1/Show.S01E02.mkv",
+		"Show/Season 1/Show.S01E03.mkv",
+		"Show/Season 1/Show.S01E03.rus.dub.ac3",
+	}
+	sizes := []int64{1000, 10, 1000, 1000, 100}
+	cat := Classify(paths, sizes, nil)
+
+	ranked := cat.RankedGroups()
+	if len(ranked) != 3 {
+		t.Fatalf("ranked groups=%d want 3", len(ranked))
+	}
+	if ranked[0].Key.Episode != 1 || ranked[1].Key.Episode != 2 || ranked[2].Key.Episode != 3 {
+		t.Fatalf("bad rank order: %v %v %v", ranked[0].Key, ranked[1].Key, ranked[2].Key)
+	}
+
+	prio := cat.DownloadPriorities()
+	want := map[int]int{
+		0: FilePrioMaximal, // ep1 video — critical
+		1: FilePrioMaximal, // ep1 subtitle inherits
+		2: FilePrioHigh,    // ep2 video
+		3: FilePrioNormal,  // ep3 video
+		4: FilePrioNormal,  // ep3 audio inherits
+	}
+	for idx, w := range want {
+		if prio[idx] != w {
+			t.Errorf("file %d (%s): prio=%d want %d", idx, paths[idx], prio[idx], w)
+		}
+	}
+}
+
+func TestDownloadPrioritiesMovieIsCritical(t *testing.T) {
+	paths := []string{
+		"Inception.2010.1080p.BluRay.mkv",
+		"Inception.2010.rus.srt",
+	}
+	cat := Classify(paths, []int64{1000, 10}, nil)
+	prio := cat.DownloadPriorities()
+	if prio[0] != FilePrioMaximal {
+		t.Errorf("movie video prio=%d want maximal", prio[0])
+	}
+	if prio[1] != FilePrioMaximal {
+		t.Errorf("movie subtitle prio=%d want maximal", prio[1])
+	}
+}
+
+func TestDownloadPrioritiesFilteredSelection(t *testing.T) {
+	paths := []string{
+		"Show/Season 1/Show.S01E01.mkv",
+		"Show/Season 1/Show.S01E02.mkv",
+		"Show/Season 1/Show.S01E03.mkv",
+	}
+	cat := Classify(paths, []int64{1000, 1000, 1000}, []string{"Show.S01E02.mkv", "Show.S01E03.mkv"})
+	prio := cat.DownloadPriorities()
+	if prio[0] != FilePrioSkip {
+		t.Errorf("unselected ep1 prio=%d want skip", prio[0])
+	}
+	// Within the selection: first selected episode is critical, second is high.
+	if prio[1] != FilePrioMaximal {
+		t.Errorf("ep2 prio=%d want maximal", prio[1])
+	}
+	if prio[2] != FilePrioHigh {
+		t.Errorf("ep3 prio=%d want high", prio[2])
+	}
+}
+
+func TestGroupLevel(t *testing.T) {
+	if GroupLevel(0) != FilePrioMaximal || GroupLevel(1) != FilePrioHigh || GroupLevel(2) != FilePrioNormal {
+		t.Errorf("levels: %d %d %d", GroupLevel(0), GroupLevel(1), GroupLevel(2))
+	}
+}

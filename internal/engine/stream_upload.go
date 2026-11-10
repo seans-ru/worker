@@ -17,7 +17,7 @@ import (
 // streamUploader uploads completed file segments to S3 while the torrent
 // is still downloading, and publishes a stream index with the seekable prefix.
 type streamUploader struct {
-	uploader *s3uploader.Uploader
+	uploader   *s3uploader.Uploader
 	destPrefix string // e.g. "users/{task_id}/"
 	logFile    string
 	logger     *slog.Logger
@@ -66,26 +66,26 @@ func (s *streamUploader) indexKey(fileIndex int) string {
 // StreamIndex is published to S3 so clients/CDN can resolve playable ranges.
 // Clients MUST NOT seek past contiguous_bytes.
 type StreamIndex struct {
-	TaskID            string                  `json:"task_id"`
-	FilePath          string                  `json:"file_path"`
-	FileIndex         int                     `json:"file_index"`
-	SizeBytes         int64                   `json:"size_bytes"`
-	SegmentSize       int64                   `json:"segment_size"`
-	ContiguousBytes   int64                   `json:"contiguous_bytes"` // exclusive max seekable offset
-	DownloadedBytes   int64                   `json:"downloaded_bytes"`
-	PercentDownloaded float64                 `json:"percent_downloaded"`
-	PercentSeekable   float64                 `json:"percent_seekable"`
-	Segments          []stream.SegmentStatus  `json:"segments"`
-	Complete          bool                    `json:"complete"`
-	UpdatedAt         time.Time               `json:"updated_at"`
+	TaskID            string                 `json:"task_id"`
+	FilePath          string                 `json:"file_path"`
+	FileIndex         int                    `json:"file_index"`
+	SizeBytes         int64                  `json:"size_bytes"`
+	SegmentSize       int64                  `json:"segment_size"`
+	ContiguousBytes   int64                  `json:"contiguous_bytes"` // exclusive max seekable offset
+	DownloadedBytes   int64                  `json:"downloaded_bytes"`
+	PercentDownloaded float64                `json:"percent_downloaded"`
+	PercentSeekable   float64                `json:"percent_seekable"`
+	Segments          []stream.SegmentStatus `json:"segments"`
+	Complete          bool                   `json:"complete"`
+	UpdatedAt         time.Time              `json:"updated_at"`
 }
 
 // UploadPending uploads newly available segments (bounded per call) and
 // refreshes the stream index. Returns the current progress snapshot.
 //
-// If the file is already fully available locally (contiguous == size), remaining
-// segments are NOT uploaded here — the final rclone move will ship the full
-// object. Progressive segments exist only for playback while downloading.
+// Segments keep being uploaded even after the file is fully downloaded —
+// they stop only when the film is fully on S3 (Finalize), so the stream
+// stays seekable while the final full-object upload is still running.
 func (s *streamUploader) UploadPending(
 	ctx context.Context,
 	taskID string,
@@ -98,11 +98,6 @@ func (s *streamUploader) UploadPending(
 	}
 
 	fp := stream.BuildProgress(layout, states, s.segmentSize, s.uploaded[layout.Index])
-
-	// File already fully present: skip the rest of the segments.
-	if fp.Complete {
-		return s.finalize(ctx, taskID, layout, fp)
-	}
 
 	pending := stream.NextUploadable(fp)
 	// Keep the poll loop responsive: at most maxSegmentsPerCall uploads per tick.
@@ -134,9 +129,10 @@ func (s *streamUploader) UploadPending(
 	}
 
 	// Upload index when anything changed (new segments or seekable prefix grew).
-	idxChanged := uploadedNow > 0 || s.lastContiguous[layout.Index] != fp.ContiguousBytes
+	upCont := stream.UploadedContiguousBytes(fp)
+	idxChanged := uploadedNow > 0 || s.lastContiguous[layout.Index] != upCont
 	if idxChanged {
-		s.lastContiguous[layout.Index] = fp.ContiguousBytes
+		s.lastContiguous[layout.Index] = upCont
 		if err := s.publishIndex(ctx, taskID, layout, fp); err != nil {
 			return progressFrom(fp, layout), err
 		}
@@ -145,8 +141,9 @@ func (s *streamUploader) UploadPending(
 	return progressFrom(fp, layout), nil
 }
 
-// Finalize marks the stream complete (all bytes seekable) and publishes the
-// index. Call this when the torrent is done; no more segment uploads.
+// Finalize marks the stream complete and publishes the index. Call this only
+// when the film is fully uploaded to S3 — from here on clients use the full
+// object, so segment uploads can stop.
 func (s *streamUploader) Finalize(ctx context.Context, taskID string, layout stream.FileLayout, states []stream.PieceState) (*backend.StreamProgress, error) {
 	if _, ok := s.uploaded[layout.Index]; !ok {
 		s.uploaded[layout.Index] = make(map[int]string)
@@ -163,18 +160,16 @@ func (s *streamUploader) finalize(ctx context.Context, taskID string, layout str
 		}
 	}
 	if skipped > 0 {
-		s.logger.Info("stream: skip remaining segments (file complete, final upload covers it)",
+		s.logger.Info("stream: segment uploads done, film fully on S3 (full object covers unpushed segments)",
 			"file", layout.Path,
-			"skipped_segments", skipped,
+			"segment_objects_skipped", skipped,
 		)
 	}
 
-	// Treat the whole file as seekable/complete; leftover segment objects are optional.
+	// The full file is on S3 now: treat every segment as present there.
 	for i := range fp.Segments {
-		if !fp.Segments[i].Available {
-			// pieces should all be downloaded when complete; mark anyway
-			fp.Segments[i].Available = true
-		}
+		fp.Segments[i].Available = true
+		fp.Segments[i].Uploaded = true
 	}
 	fp.ContiguousBytes = fp.Size
 	fp.PercentSeekable = 100
@@ -195,16 +190,23 @@ func (s *streamUploader) finalize(ctx context.Context, taskID string, layout str
 }
 
 func (s *streamUploader) publishIndex(ctx context.Context, taskID string, layout stream.FileLayout, fp stream.FileProgress) error {
+	// Seekability on S3 is limited to the contiguous uploaded segment prefix
+	// (after finalize everything is marked present).
+	upCont := stream.UploadedContiguousBytes(fp)
+	var pctSeek float64
+	if fp.Size > 0 {
+		pctSeek = float64(upCont) / float64(fp.Size) * 100
+	}
 	idx := StreamIndex{
 		TaskID:            taskID,
 		FilePath:          layout.Path,
 		FileIndex:         layout.Index,
 		SizeBytes:         layout.Size,
 		SegmentSize:       s.segmentSize,
-		ContiguousBytes:   fp.ContiguousBytes,
+		ContiguousBytes:   upCont,
 		DownloadedBytes:   fp.DownloadedBytes,
 		PercentDownloaded: fp.PercentDownloaded,
-		PercentSeekable:   fp.PercentSeekable,
+		PercentSeekable:   pctSeek,
 		Segments:          fp.Segments,
 		Complete:          fp.Complete,
 		UpdatedAt:         time.Now().UTC(),
@@ -256,21 +258,28 @@ func progressFrom(fp stream.FileProgress, layout stream.FileLayout) *backend.Str
 			av++
 		}
 	}
-	// StreamReady: at least one segment or 5% contiguous — enough for a player to start.
-	streamReady := fp.ContiguousBytes > 0 && (up > 0 || fp.ContiguousBytes >= fp.Size/20)
+	// What players can actually use from S3: the contiguous uploaded prefix.
+	upCont := stream.UploadedContiguousBytes(fp)
+	var pctSeek float64
+	if layout.Size > 0 {
+		pctSeek = float64(upCont) / float64(layout.Size) * 100
+	}
+	// StreamReady: at least one uploaded segment — enough for a player to start.
+	streamReady := upCont > 0
 	return &backend.StreamProgress{
 		FilePath:          layout.Path,
 		SizeBytes:         layout.Size,
-		ContiguousBytes:   fp.ContiguousBytes,
+		ContiguousBytes:   upCont,
 		DownloadedBytes:   fp.DownloadedBytes,
 		PercentDownloaded: fp.PercentDownloaded,
-		PercentSeekable:   fp.PercentSeekable,
+		PercentSeekable:   pctSeek,
 		SegmentSize:       fp.SegmentSize,
 		SegmentsTotal:     len(fp.Segments),
 		SegmentsUploaded:  up,
 		SegmentsAvailable: av,
-		StreamReady:       streamReady && !fp.Complete,
-		Complete:          fp.Complete,
+		StreamReady:       streamReady,
+		// Complete is set by finalize() when the film is fully on S3.
+		Complete: false,
 	}
 }
 

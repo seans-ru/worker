@@ -7,45 +7,10 @@ import (
 	"time"
 
 	"github.com/Geardung/seans-worker/internal/config"
-	"github.com/Geardung/seans-worker/internal/qbit"
 )
 
 func testLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-}
-
-// mockQBit implements a minimal qBittorrent client for testing.
-type mockQBit struct {
-	torrents []qbit.TorrentInfo
-	files    []qbit.TorrentFile
-	addErr   error
-}
-
-func (m *mockQBit) GetTorrentBySavePath(_ interface{}, _, _ string) (*qbit.TorrentInfo, error) {
-	if len(m.torrents) > 0 {
-		return &m.torrents[0], nil
-	}
-	return nil, nil
-}
-
-func (m *mockQBit) GetFiles(_ interface{}, _ string) ([]qbit.TorrentFile, error) {
-	return m.files, nil
-}
-
-func (m *mockQBit) AddTorrentMagnet(_ interface{}, _, _, _ string) error {
-	return m.addErr
-}
-
-func (m *mockQBit) SetFilePriority(_ interface{}, _ string, _ []int, _ int) error {
-	return nil
-}
-
-func (m *mockQBit) DeleteTorrent(_ interface{}, _ string, _ bool) error {
-	return nil
-}
-
-func (m *mockQBit) PauseTorrents(_ interface{}, _ string) error {
-	return nil
 }
 
 func TestIsActiveState(t *testing.T) {
@@ -100,7 +65,8 @@ func TestConfigLoad_Defaults(t *testing.T) {
 	t.Setenv("BACKEND_URL", "http://localhost:9999")
 	t.Setenv("WORKER_REG_SECRET", "test-secret")
 	t.Setenv("QBIT_API_KEY", "qbt_testkey123")
-	t.Setenv("MOCK_S3", "true")
+	t.Setenv("S3_ACCESS_KEY", "AKIAKEY")
+	t.Setenv("S3_SECRET_KEY", "secret")
 
 	cfg, err := config.Load()
 	if err != nil {

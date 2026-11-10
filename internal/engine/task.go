@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Geardung/seans-worker/internal/backend"
@@ -62,6 +63,17 @@ type taskRunner struct {
 	task     *backend.Task
 	state    *TaskState
 	logger   *slog.Logger
+
+	// items is the ordered S3 upload queue content (built in prepare).
+	items []uploadItem
+	// queue uploads files one at a time, starting in the download phase.
+	queue *uploadQueue
+	// queueErr / segErr receive the results of the background workers.
+	queueErr chan error
+	segErr   chan error
+	// filmOnS3 is closed when the primary video is fully uploaded to S3.
+	filmOnS3 chan struct{}
+	filmOnce sync.Once
 }
 
 func newTaskRunner(cfg *config.Config, bc *backend.Client, qc *qbit.Client, up *s3uploader.Uploader, task *backend.Task, state *TaskState, logger *slog.Logger) *taskRunner {
@@ -77,6 +89,11 @@ func newTaskRunner(cfg *config.Config, bc *backend.Client, qc *qbit.Client, up *
 }
 
 func (tr *taskRunner) run(ctx context.Context) {
+	// Per-task context so background workers (upload queue, segment loop)
+	// stop when the task ends.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	tr.logger.Info("task started", "stage", "preparing")
 
 	if err := tr.prepare(ctx); err != nil {
@@ -161,28 +178,32 @@ func (tr *taskRunner) prepare(ctx context.Context) error {
 		tr.state.Selected[idx] = true
 	}
 
-	// Enable selected files; skip samples unless explicitly requested.
-	if len(selected) > 0 {
-		if err := tr.qc.SetFilePriority(ctx, torrent.Hash, selected, 1); err != nil {
-			tr.logger.Warn("set file priority failed", "error", err)
+	// Upload queue: selected files go up to S3 one at a time, in episode
+	// priority order (first episode first, media before video in each group).
+	tr.items = buildUploadItems(files, cat, tr.state.Selected, stagingPath)
+
+	// Download priorities by episode order: first episode (or movie) is
+	// critical, second is high, the rest are normal; samples stay off.
+	prioMap := cat.DownloadPriorities()
+	byPrio := make(map[int][]int)
+	for idx, p := range prioMap {
+		byPrio[p] = append(byPrio[p], idx)
+	}
+	for _, level := range []int{media.FilePrioMaximal, media.FilePrioHigh, media.FilePrioNormal, media.FilePrioSkip} {
+		idxs := byPrio[level]
+		if len(idxs) == 0 {
+			continue
 		}
-		// Deselect the rest (priority 0) so we don't download samples/extras.
-		sel := make(map[int]bool, len(selected))
-		for _, idx := range selected {
-			sel[idx] = true
-		}
-		var skip []int
-		for _, f := range files {
-			if !sel[f.Index] {
-				skip = append(skip, f.Index)
-			}
-		}
-		if len(skip) > 0 {
-			if err := tr.qc.SetFilePriority(ctx, torrent.Hash, skip, 0); err != nil {
-				tr.logger.Warn("clear file priority failed", "error", err)
-			}
+		if err := tr.qc.SetFilePriority(ctx, torrent.Hash, idxs, level); err != nil {
+			tr.logger.Warn("set file priority failed", "priority", level, "error", err)
 		}
 	}
+	tr.logger.Info("download priorities set",
+		"critical", len(byPrio[media.FilePrioMaximal]),
+		"high", len(byPrio[media.FilePrioHigh]),
+		"normal", len(byPrio[media.FilePrioNormal]),
+		"skip", len(byPrio[media.FilePrioSkip]),
+	)
 
 	// Sequential download so contiguous prefix grows — required for seekable streaming.
 	if err := tr.qc.EnableSequentialDownload(ctx, torrent.Hash); err != nil {
@@ -247,6 +268,7 @@ func (tr *taskRunner) prepare(ctx context.Context) error {
 		"files", len(files),
 		"stream_file_index", tr.state.StreamFileIndex,
 		"groups", len(cat.Groups),
+		"upload_items", len(tr.items),
 	)
 	return nil
 }
@@ -329,6 +351,15 @@ func (tr *taskRunner) waitForMetadata(ctx context.Context, hash string) error {
 	}
 }
 
+// signalFilmOnS3 stops the segment loop (the film is fully on S3 now).
+func (tr *taskRunner) signalFilmOnS3() {
+	tr.filmOnce.Do(func() {
+		if tr.filmOnS3 != nil {
+			close(tr.filmOnS3)
+		}
+	})
+}
+
 func (tr *taskRunner) download(ctx context.Context) error {
 	tr.state.Stage = StageDownloading
 	tr.state.DownloadStart = time.Now()
@@ -338,10 +369,42 @@ func (tr *taskRunner) download(ctx context.Context) error {
 		"segment_size", tr.cfg.StreamSegmentSize,
 	)
 
-	// Progressive S3 segment upload while downloading.
+	// Background workers start right away:
+	//   - uploadQueue: files go up one at a time ("по очереди") in priority
+	//     order as soon as each file is fully downloaded — in parallel with
+	//     segment uploads;
+	//   - segmentLoop: progressive segment upload of the primary video, which
+	//     keeps running until the film is fully on S3.
 	destPrefix := "users/" + tr.task.TaskID + "/"
 	logFile := filepath.Join(tr.cfg.StateDir, "rclone.log")
 	su := newStreamUploader(tr.uploader, destPrefix, tr.cfg.StreamSegmentSize, logFile, tr.logger)
+	tr.queue = newUploadQueue(tr.uploader, destPrefix, logFile, tr.items, tr.state, tr.logger)
+	tr.filmOnS3 = make(chan struct{})
+	tr.queueErr = make(chan error, 1)
+	tr.segErr = make(chan error, 1)
+
+	tr.queue.onUploaded = func(it uploadItem) {
+		if it.FileIndex == tr.state.StreamFileIndex {
+			tr.signalFilmOnS3()
+		}
+	}
+
+	streamEnabled := tr.state.StreamFileIndex >= 0 && tr.state.StreamFileIndex < len(tr.state.Files)
+	if streamEnabled {
+		go func() { tr.segErr <- tr.segmentLoop(ctx, su) }()
+	} else {
+		tr.logger.Warn("stream upload disabled: no primary video file selected")
+		tr.segErr <- nil
+	}
+
+	go func() {
+		err := tr.queue.run(ctx)
+		if err == nil {
+			// Make sure the segment loop always gets its stop signal.
+			tr.signalFilmOnS3()
+		}
+		tr.queueErr <- err
+	}()
 
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
@@ -349,20 +412,6 @@ func (tr *taskRunner) download(ctx context.Context) error {
 	var lastDownloaded int64
 	lastProgressTime := time.Now()
 	taskDeadline := time.After(tr.cfg.TaskMaxDuration)
-
-	// Layouts built once piece size is known.
-	var layout *stream.FileLayout
-	var layouts []stream.FileLayout
-	var streamReadyLogged bool
-	var lastContiguous int64
-	var lastSegUploads int
-
-	if tr.state.StreamFileIndex < 0 {
-		tr.logger.Warn("stream upload disabled: no primary video file selected")
-	} else if tr.state.StreamFileIndex >= len(tr.state.Files) {
-		tr.logger.Warn("stream upload disabled: stream_file_index out of range",
-			"stream_file_index", tr.state.StreamFileIndex, "files", len(tr.state.Files))
-	}
 
 	for {
 		select {
@@ -396,95 +445,134 @@ func (tr *taskRunner) download(ctx context.Context) error {
 				return &TaskError{Reason: "stalled: no download progress", Permanent: true}
 			}
 
-			downloadDone := torrent.Progress >= 1.0 && !isActiveState(string(torrent.State))
+			// Feed the upload queue with fully downloaded files.
+			if qfiles, ferr := tr.qc.GetFiles(ctx, torrent.Hash); ferr == nil {
+				ready := make([]int, 0, len(qfiles))
+				for _, f := range qfiles {
+					if tr.state.Selected[f.Index] && f.Progress >= 1.0 {
+						ready = append(ready, f.Index)
+					}
+				}
+				tr.queue.SetReady(ready)
+			}
 
-			// Progressive segment upload only while the torrent is still downloading.
-			// Once done — skip remaining segments (final rclone move ships the full object).
+			downloadDone := torrent.Progress >= 1.0 && !isActiveState(string(torrent.State))
 			if downloadDone {
 				tr.state.ProgressPct = 100
 				tr.state.DownloadSeconds = int(time.Since(tr.state.DownloadStart).Seconds())
-				if layout != nil {
-					states, serr := tr.qc.GetPieceStates(ctx, torrent.Hash)
-					if serr == nil {
-						if sp, ferr := su.Finalize(ctx, tr.task.TaskID, *layout, toPieceStates(states)); ferr == nil && sp != nil {
-							tr.state.Stream = sp
-						}
-					} else if tr.state.Stream != nil {
-						tr.state.Stream.Complete = true
-						tr.state.Stream.ContiguousBytes = tr.state.Stream.SizeBytes
-						tr.state.Stream.PercentSeekable = 100
-						tr.state.Stream.PercentDownloaded = 100
-					}
-				}
+				tr.queue.MarkAllReady()
 				tr.logger.Info("download complete", "seconds", tr.state.DownloadSeconds)
 				return nil
 			}
+		}
+	}
+}
 
-			if tr.state.StreamFileIndex >= 0 && tr.state.StreamFileIndex < len(tr.state.Files) {
-				if layouts == nil {
-					pieceSize, perr := tr.qc.GetPieceSize(ctx, torrent.Hash)
-					if perr != nil {
-						tr.logger.Warn("stream: get piece size failed", "error", perr)
-					} else if pieceSize <= 0 {
-						tr.logger.Warn("stream: invalid piece size", "piece_size", pieceSize)
+// segmentLoop uploads progressive segments of the primary video to S3 while
+// the torrent downloads AND while the full film object is still uploading.
+// It stops only when the film is fully on S3 (filmOnS3), then marks the
+// stream index complete.
+func (tr *taskRunner) segmentLoop(ctx context.Context, su *streamUploader) error {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	var layout *stream.FileLayout
+	var layouts []stream.FileLayout
+	var streamReadyLogged bool
+	var lastContiguous int64
+	var lastSegUploads int
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-tr.filmOnS3:
+			// The film is fully on S3 — no more segment uploads needed.
+			if layout != nil {
+				states, serr := tr.qc.GetPieceStates(ctx, tr.state.TorrentHash)
+				if serr == nil {
+					if sp, ferr := su.Finalize(ctx, tr.task.TaskID, *layout, toPieceStates(states)); ferr == nil && sp != nil {
+						tr.state.Stream = sp
+					} else if ferr != nil {
+						tr.logger.Warn("stream: finalize failed", "error", ferr)
+					}
+				} else if tr.state.Stream != nil {
+					tr.state.Stream.Complete = true
+					tr.state.Stream.ContiguousBytes = tr.state.Stream.SizeBytes
+					tr.state.Stream.PercentSeekable = 100
+					tr.state.Stream.PercentDownloaded = 100
+				}
+			}
+			tr.logger.Info("stream: segment uploads stopped", "reason", "film fully on S3")
+			return nil
+		case <-ticker.C:
+			if tr.state.StreamFileIndex < 0 || tr.state.StreamFileIndex >= len(tr.state.Files) {
+				continue
+			}
+			if layouts == nil {
+				pieceSize, perr := tr.qc.GetPieceSize(ctx, tr.state.TorrentHash)
+				if perr != nil {
+					tr.logger.Warn("stream: get piece size failed", "error", perr)
+				} else if pieceSize <= 0 {
+					tr.logger.Warn("stream: invalid piece size", "piece_size", pieceSize)
+				} else {
+					layouts = fileLayoutsFromQBit(tr.state.Files, pieceSize)
+					for i := range layouts {
+						if layouts[i].Index == tr.state.StreamFileIndex {
+							layout = &layouts[i]
+							break
+						}
+					}
+					if layout == nil {
+						tr.logger.Warn("stream: no layout for stream file",
+							"stream_file_index", tr.state.StreamFileIndex, "layouts", len(layouts))
 					} else {
-						layouts = fileLayoutsFromQBit(tr.state.Files, pieceSize)
-						for i := range layouts {
-							if layouts[i].Index == tr.state.StreamFileIndex {
-								layout = &layouts[i]
-								break
-							}
-						}
-						if layout == nil {
-							tr.logger.Warn("stream: no layout for stream file",
-								"stream_file_index", tr.state.StreamFileIndex, "layouts", len(layouts))
-						} else {
-							tr.logger.Info("stream: layout ready",
-								"file", layout.Path,
-								"size_bytes", layout.Size,
-								"piece_size", layout.PieceSize,
-								"piece_range", fmt.Sprintf("%d-%d", layout.PieceStart, layout.PieceEnd),
-								"local_path", filepath.Join(tr.cfg.StagingDir, tr.task.TaskID, filepath.FromSlash(layout.Path)),
-							)
-						}
+						tr.logger.Info("stream: layout ready",
+							"file", layout.Path,
+							"size_bytes", layout.Size,
+							"piece_size", layout.PieceSize,
+							"piece_range", fmt.Sprintf("%d-%d", layout.PieceStart, layout.PieceEnd),
+							"local_path", filepath.Join(tr.cfg.StagingDir, tr.task.TaskID, filepath.FromSlash(layout.Path)),
+						)
 					}
 				}
-				if layout != nil {
-					states, serr := tr.qc.GetPieceStates(ctx, torrent.Hash)
-					if serr != nil {
-						tr.logger.Warn("stream: get piece states failed", "error", serr)
-					} else {
-						localPath := filepath.Join(tr.cfg.StagingDir, tr.task.TaskID, filepath.FromSlash(layout.Path))
-						sp, uerr := su.UploadPending(ctx, tr.task.TaskID, *layout, localPath, toPieceStates(states))
-						if uerr != nil {
-							tr.logger.Warn("stream: segment upload failed", "error", uerr)
-						}
-						if sp != nil {
-							tr.state.Stream = sp
-							uploadsNow := sp.SegmentsUploaded
-							if uploadsNow > lastSegUploads || sp.ContiguousBytes > lastContiguous {
-								tr.logger.Info("stream: progress",
-									"file", sp.FilePath,
-									"segments_uploaded", sp.SegmentsUploaded,
-									"segments_available", sp.SegmentsAvailable,
-									"segments_total", sp.SegmentsTotal,
-									"contiguous_bytes", sp.ContiguousBytes,
-									"percent_seekable", fmt.Sprintf("%.2f", sp.PercentSeekable),
-									"percent_downloaded", fmt.Sprintf("%.2f", sp.PercentDownloaded),
-									"stream_ready", sp.StreamReady,
-								)
-								lastSegUploads = uploadsNow
-								lastContiguous = sp.ContiguousBytes
-							}
-							if sp.StreamReady && !streamReadyLogged {
-								tr.logger.Info("stream: ready for playback",
-									"contiguous_bytes", sp.ContiguousBytes,
-									"max_seekable_bytes", sp.ContiguousBytes,
-								)
-								streamReadyLogged = true
-							}
-						}
-					}
+			}
+			if layout == nil {
+				continue
+			}
+			states, serr := tr.qc.GetPieceStates(ctx, tr.state.TorrentHash)
+			if serr != nil {
+				tr.logger.Warn("stream: get piece states failed", "error", serr)
+				continue
+			}
+			localPath := filepath.Join(tr.cfg.StagingDir, tr.task.TaskID, filepath.FromSlash(layout.Path))
+			sp, uerr := su.UploadPending(ctx, tr.task.TaskID, *layout, localPath, toPieceStates(states))
+			if uerr != nil {
+				tr.logger.Warn("stream: segment upload failed", "error", uerr)
+			}
+			if sp != nil {
+				tr.state.Stream = sp
+				uploadsNow := sp.SegmentsUploaded
+				if uploadsNow > lastSegUploads || sp.ContiguousBytes > lastContiguous {
+					tr.logger.Info("stream: progress",
+						"file", sp.FilePath,
+						"segments_uploaded", sp.SegmentsUploaded,
+						"segments_available", sp.SegmentsAvailable,
+						"segments_total", sp.SegmentsTotal,
+						"contiguous_bytes", sp.ContiguousBytes,
+						"percent_seekable", fmt.Sprintf("%.2f", sp.PercentSeekable),
+						"percent_downloaded", fmt.Sprintf("%.2f", sp.PercentDownloaded),
+						"stream_ready", sp.StreamReady,
+					)
+					lastSegUploads = uploadsNow
+					lastContiguous = sp.ContiguousBytes
+				}
+				if sp.StreamReady && !streamReadyLogged {
+					tr.logger.Info("stream: ready for playback",
+						"contiguous_bytes", sp.ContiguousBytes,
+						"max_seekable_bytes", sp.ContiguousBytes,
+					)
+					streamReadyLogged = true
 				}
 			}
 		}
@@ -504,18 +592,29 @@ func (tr *taskRunner) upload(ctx context.Context) error {
 	tr.state.Stage = StageUploading
 	tr.state.UploadStart = time.Now()
 	tr.state.Message = "uploading to S3"
-	tr.logger.Info("upload started")
+	tr.logger.Info("upload started",
+		"items", len(tr.items),
+		"bytes", tr.queue.totalBytes(),
+	)
 
-	stagingPath := filepath.Join(tr.cfg.StagingDir, tr.task.TaskID)
-	logFile := filepath.Join(tr.cfg.StateDir, "rclone.log")
-
-	if err := tr.uploader.Move(ctx, stagingPath, "users/"+tr.task.TaskID+"/", 3, logFile); err != nil {
+	// Files have been uploading since the download phase — the queue processes
+	// them one at a time, in episode priority order. Wait until it drains.
+	if err := <-tr.queueErr; err != nil {
 		return &TaskError{Reason: fmt.Sprintf("upload failed: %v", err), Permanent: false}
 	}
+	// The segment loop exits right after the film lands on S3 (finalize).
+	if err := <-tr.segErr; err != nil && !errors.Is(err, context.Canceled) {
+		tr.logger.Warn("segment loop ended with error", "error", err)
+	}
 
-	tr.state.UploadSeconds = int(time.Since(tr.state.UploadStart).Seconds())
-	tr.logger.Info("upload complete", "seconds", tr.state.UploadSeconds)
+	tr.state.UploadSeconds = tr.queue.Seconds()
+	tr.logger.Info("upload complete",
+		"seconds", tr.state.UploadSeconds,
+		"files", len(tr.items),
+		"bytes", tr.queue.totalBytes(),
+	)
 
+	stagingPath := filepath.Join(tr.cfg.StagingDir, tr.task.TaskID)
 	os.RemoveAll(stagingPath)
 
 	if tr.state.TorrentHash != "" {
