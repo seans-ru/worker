@@ -32,6 +32,14 @@ type Config struct {
 	// StreamSegmentSize is the progressive S3 segment size for streaming-while-downloading.
 	// 0 means default (8 MiB).
 	StreamSegmentSize int64
+	// TranscodeEnabled builds an HLS quality ladder from the primary video (ABR playback).
+	TranscodeEnabled bool
+	// FfmpegPath is the ffmpeg binary used for the ladder (default "ffmpeg").
+	FfmpegPath string
+	// TranscodeEncoder: "libx264" (default) or "h264_nvenc".
+	TranscodeEncoder string
+	// TranscodeSegmentSec is the HLS segment duration (default 4).
+	TranscodeSegmentSec int
 }
 
 func Load() (*Config, error) {
@@ -58,6 +66,10 @@ func Load() (*Config, error) {
 		DrainTimeout:           envDuration("DRAIN_TIMEOUT_SEC", 3600*time.Second),
 		StateDir:               envOr("STATE_DIR", "/state"),
 		StreamSegmentSize:      envInt64("STREAM_SEGMENT_SIZE_MB", 8) * 1024 * 1024,
+		TranscodeEnabled:       envBool("TRANSCODE_ENABLED", false),
+		FfmpegPath:             envOr("FFMPEG_PATH", "ffmpeg"),
+		TranscodeEncoder:       envOr("TRANSCODE_ENCODER", "libx264"),
+		TranscodeSegmentSec:    envInt("TRANSCODE_SEGMENT_SEC", 4),
 	}
 
 	if cfg.BackendURL == "" {

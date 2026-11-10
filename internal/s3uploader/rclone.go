@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Uploader handles S3 uploads via rclone.
@@ -244,6 +245,50 @@ func (u *Uploader) UploadFileWithStats(ctx context.Context, localPath, destKey s
 		_ = appendFileLine(logFile, "copyto ok: "+localPath+" -> "+remote+"\n")
 	}
 	return nil
+}
+
+// UploadDir copies a local directory tree to the S3 prefix in a single rclone
+// run — suitable for many small files (an HLS ladder), unlike per-file copyto.
+// The caller keeps and cleans up localDir. Retries up to maxAttempts times.
+func (u *Uploader) UploadDir(ctx context.Context, localDir, destPrefix string, maxAttempts int, logFile string) error {
+	remote := u.remotePath(destPrefix)
+	args := []string{
+		"copy",
+		localDir,
+		remote,
+		"--transfers", "4",
+		"--checkers", "8",
+		"--s3-upload-cutoff", "128M",
+		"--s3-no-check-bucket",
+		"--fast-list",
+		"-v",
+		"--stats", "15s",
+	}
+	if logFile != "" {
+		args = append(args, "--log-file", logFile)
+	}
+
+	var err error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		cmd := exec.CommandContext(ctx, "rclone", args...)
+		cmd.Env = append(os.Environ(), "RCLONE_CONFIG="+u.configPath)
+		out, runErr := cmd.CombinedOutput()
+		err = runErr
+		if runErr == nil {
+			u.logger.Info("rclone copy ok", "src", localDir, "dest", remote)
+			return nil
+		}
+		u.logger.Warn("rclone copy attempt failed",
+			"attempt", attempt, "max", maxAttempts, "error", runErr, "out", truncate(string(out), 400))
+		if attempt < maxAttempts {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Duration(attempt) * 5 * time.Second):
+			}
+		}
+	}
+	return fmt.Errorf("rclone copy %s -> %s failed after %d attempts: %w", localDir, remote, maxAttempts, err)
 }
 
 func scanLines(r io.Reader, out chan<- string) {

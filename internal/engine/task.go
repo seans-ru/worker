@@ -18,6 +18,7 @@ import (
 	"github.com/Geardung/seans-worker/internal/qbit"
 	"github.com/Geardung/seans-worker/internal/s3uploader"
 	"github.com/Geardung/seans-worker/internal/stream"
+	"github.com/Geardung/seans-worker/internal/transcode"
 )
 
 type Stage string
@@ -68,12 +69,16 @@ type taskRunner struct {
 	items []uploadItem
 	// queue uploads files one at a time, starting in the download phase.
 	queue *uploadQueue
-	// queueErr / segErr receive the results of the background workers.
-	queueErr chan error
-	segErr   chan error
+	// queueErr / segErr / transcodeErr receive results of the background workers.
+	queueErr     chan error
+	segErr       chan error
+	transcodeErr chan error
 	// filmOnS3 is closed when the primary video is fully uploaded to S3.
 	filmOnS3 chan struct{}
 	filmOnce sync.Once
+	// filmDownloaded is closed when the primary video file is fully on disk.
+	filmDownloaded chan struct{}
+	dlOnce         sync.Once
 }
 
 func newTaskRunner(cfg *config.Config, bc *backend.Client, qc *qbit.Client, up *s3uploader.Uploader, task *backend.Task, state *TaskState, logger *slog.Logger) *taskRunner {
@@ -360,6 +365,16 @@ func (tr *taskRunner) signalFilmOnS3() {
 	})
 }
 
+// signalFilmDownloaded marks the primary video fully on disk — the HLS
+// ladder may start building from it.
+func (tr *taskRunner) signalFilmDownloaded() {
+	tr.dlOnce.Do(func() {
+		if tr.filmDownloaded != nil {
+			close(tr.filmDownloaded)
+		}
+	})
+}
+
 func (tr *taskRunner) download(ctx context.Context) error {
 	tr.state.Stage = StageDownloading
 	tr.state.DownloadStart = time.Now()
@@ -380,8 +395,10 @@ func (tr *taskRunner) download(ctx context.Context) error {
 	su := newStreamUploader(tr.uploader, destPrefix, tr.cfg.StreamSegmentSize, logFile, tr.logger)
 	tr.queue = newUploadQueue(tr.uploader, destPrefix, logFile, tr.items, tr.state, tr.logger)
 	tr.filmOnS3 = make(chan struct{})
+	tr.filmDownloaded = make(chan struct{})
 	tr.queueErr = make(chan error, 1)
 	tr.segErr = make(chan error, 1)
+	tr.transcodeErr = make(chan error, 1)
 
 	tr.queue.onUploaded = func(it uploadItem) {
 		if it.FileIndex == tr.state.StreamFileIndex {
@@ -395,6 +412,18 @@ func (tr *taskRunner) download(ctx context.Context) error {
 	} else {
 		tr.logger.Warn("stream upload disabled: no primary video file selected")
 		tr.segErr <- nil
+	}
+
+	// HLS ladder (ABR): starts as soon as the primary video is on disk and
+	// runs in parallel with downloads and uploads.
+	ladderEnabled := tr.cfg.TranscodeEnabled && streamEnabled && tr.state.Selected[tr.state.StreamFileIndex]
+	if ladderEnabled {
+		go func() { tr.transcodeErr <- tr.ladderWorker(ctx, logFile) }()
+	} else {
+		if tr.cfg.TranscodeEnabled {
+			tr.logger.Warn("hls ladder disabled: no primary video file selected")
+		}
+		tr.transcodeErr <- nil
 	}
 
 	go func() {
@@ -454,6 +483,12 @@ func (tr *taskRunner) download(ctx context.Context) error {
 					}
 				}
 				tr.queue.SetReady(ready)
+				for _, idx := range ready {
+					if idx == tr.state.StreamFileIndex {
+						tr.signalFilmDownloaded()
+						break
+					}
+				}
 			}
 
 			downloadDone := torrent.Progress >= 1.0 && !isActiveState(string(torrent.State))
@@ -461,6 +496,7 @@ func (tr *taskRunner) download(ctx context.Context) error {
 				tr.state.ProgressPct = 100
 				tr.state.DownloadSeconds = int(time.Since(tr.state.DownloadStart).Seconds())
 				tr.queue.MarkAllReady()
+				tr.signalFilmDownloaded()
 				tr.logger.Info("download complete", "seconds", tr.state.DownloadSeconds)
 				return nil
 			}
@@ -588,6 +624,59 @@ func isActiveState(state string) bool {
 	}
 }
 
+// ladderWorker waits until the primary video is fully downloaded, then
+// builds the HLS quality ladder and uploads it under users/{task}/hls/.
+func (tr *taskRunner) ladderWorker(ctx context.Context, logFile string) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-tr.filmDownloaded:
+	}
+	return tr.buildLadder(ctx, logFile)
+}
+
+// buildLadder encodes the primary video into an HLS quality ladder
+// (240p–1080p segments + master.m3u8) and copies it to S3 in one rclone run.
+func (tr *taskRunner) buildLadder(ctx context.Context, logFile string) error {
+	src := ""
+	for _, f := range tr.state.Files {
+		if f.Index == tr.state.StreamFileIndex {
+			src = filepath.Join(tr.cfg.StagingDir, tr.task.TaskID, filepath.FromSlash(f.Name))
+			break
+		}
+	}
+	if src == "" {
+		return fmt.Errorf("primary video %d not among task files", tr.state.StreamFileIndex)
+	}
+
+	outRoot := filepath.Join(tr.cfg.StagingDir, tr.task.TaskID+".hls")
+	defer os.RemoveAll(outRoot)
+
+	plan, err := transcode.BuildPlan(src, outRoot, transcode.DefaultLadder(), transcode.Options{
+		FfmpegPath:     tr.cfg.FfmpegPath,
+		Encoder:        transcode.Encoder(tr.cfg.TranscodeEncoder),
+		SegmentSeconds: tr.cfg.TranscodeSegmentSec,
+	})
+	if err != nil {
+		return err
+	}
+
+	start := time.Now()
+	if err := plan.Execute(ctx); err != nil {
+		return err
+	}
+	if err := tr.uploader.UploadDir(ctx, outRoot, "users/"+tr.task.TaskID+"/", 3, logFile); err != nil {
+		return fmt.Errorf("upload ladder: %w", err)
+	}
+
+	tr.logger.Info("hls ladder ready",
+		"rungs", len(plan.Steps),
+		"seconds", int(time.Since(start).Seconds()),
+		"s3_prefix", "users/"+tr.task.TaskID+"/hls/",
+	)
+	return nil
+}
+
 func (tr *taskRunner) upload(ctx context.Context) error {
 	tr.state.Stage = StageUploading
 	tr.state.UploadStart = time.Now()
@@ -605,6 +694,10 @@ func (tr *taskRunner) upload(ctx context.Context) error {
 	// The segment loop exits right after the film lands on S3 (finalize).
 	if err := <-tr.segErr; err != nil && !errors.Is(err, context.Canceled) {
 		tr.logger.Warn("segment loop ended with error", "error", err)
+	}
+	// Non-fatal: the source file is already on S3, VOD playback works.
+	if err := <-tr.transcodeErr; err != nil && !errors.Is(err, context.Canceled) {
+		tr.logger.Warn("hls ladder failed", "error", err)
 	}
 
 	tr.state.UploadSeconds = tr.queue.Seconds()

@@ -8,6 +8,6 @@ RUN CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=${VERSION}" \
     -o /out/agent ./cmd/agent
 
 FROM alpine:3.20
-RUN apk add --no-cache rclone ca-certificates
+RUN apk add --no-cache rclone ca-certificates ffmpeg
 COPY --from=build /out/agent /usr/local/bin/agent
 ENTRYPOINT ["agent"]
